@@ -848,11 +848,11 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
 
 class NodeGraphicsView(QtWidgets.QGraphicsView):
-    def __init__(self, parent, ros_network):
+    def __init__(self, parent):
         super().__init__(parent)
 
         # Hold onto a reference to the ROS 2 network
-        self._ros_network = ros_network
+        self._ros_network = ROSGraph()
         self._topic_edges = []
         self._service_edges = []
         self._action_edges = []
@@ -974,9 +974,7 @@ def main():
         app.quit()
     signal.signal(signal.SIGINT, do_shutdown)
 
-    network = ROSGraph()
-
-    gv = NodeGraphicsView(None, network)
+    gv = NodeGraphicsView(None)
     gv.show()
 
     return app.exec_()

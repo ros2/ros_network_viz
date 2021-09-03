@@ -17,11 +17,12 @@ import signal
 import sys
 import time
 
-from PyQt5 import QtCore, QtGui, QtWidgets
-
 import networkx
 
-from ros_network_viz.ros_graph import ROSGraph, topic_is_hidden, service_is_hidden
+from PyQt5 import QtCore, QtGui, QtWidgets
+
+from ros_network_viz.ros_graph import ROSGraph, service_is_hidden, topic_is_hidden
+
 
 def convert_data_to_color(data):
     # rgb or rgba
@@ -31,6 +32,7 @@ def convert_data_to_color(data):
 
 
 class ConnectionItem(QtWidgets.QGraphicsPathItem):
+
     def __init__(self):
         super().__init__()
 
@@ -55,6 +57,7 @@ class ConnectionItem(QtWidgets.QGraphicsPathItem):
 
 
 class AttrItem(QtWidgets.QGraphicsItem):
+
     def __init__(self, parent, name, index):
         super().__init__(parent)
 
@@ -112,10 +115,12 @@ class AttrItem(QtWidgets.QGraphicsItem):
         parent = self.parentItem()
 
         # First draw the background
-        rect = QtCore.QRect(int(parent._node_border / 2),
-                            parent._base_height - parent._radius + self._index * parent._attr_height,
-                            parent.width() - parent._node_border,
-                            parent._attr_height)
+        x = int(parent._node_border / 2)
+        y = parent._base_height - parent._radius + self._index * parent._attr_height
+        width = parent.width() - parent._node_border
+        height = parent._attr_height
+        rect = QtCore.QRect(x, y, width, height)
+
         painter.setPen(self._bg_pen)
         painter.setBrush(self._bg_brush)
 
@@ -157,7 +162,8 @@ class AttrItem(QtWidgets.QGraphicsItem):
         else:
             x = -width / 2.0
 
-        y = parent._base_height - parent._radius + parent._attr_height / 4 + self._index * parent._attr_height
+        pixels_from_index = self._index * parent._attr_height
+        y = parent._base_height - parent._radius + parent._attr_height / 4 + pixels_from_index
 
         return QtCore.QRectF(x, y, width, height)
 
@@ -170,6 +176,7 @@ class AttrItem(QtWidgets.QGraphicsItem):
 
 
 class TopicAttrItem(AttrItem):
+
     def __init__(self, parent, name, index):
         super().__init__(parent, name, index)
 
@@ -191,6 +198,7 @@ class TopicAttrItem(AttrItem):
 
 
 class ServiceAttrItem(AttrItem):
+
     def __init__(self, parent, name, index):
         super().__init__(parent, name, index)
 
@@ -212,6 +220,7 @@ class ServiceAttrItem(AttrItem):
 
 
 class ActionAttrItem(AttrItem):
+
     def __init__(self, parent, name, index):
         super().__init__(parent, name, index)
 
@@ -233,6 +242,7 @@ class ActionAttrItem(AttrItem):
 
 
 class NodeItem(QtWidgets.QGraphicsObject):
+
     def __init__(self, name):
         super().__init__()
 
@@ -314,9 +324,9 @@ class NodeItem(QtWidgets.QGraphicsObject):
         text_height = metrics.boundingRect(name).height() + 14
         margin = int((text_width - self.width()) * 0.5)
         text_rect = QtCore.QRect(-margin,
-                                -text_height,
-                                text_width,
-                                text_height)
+                                 -text_height,
+                                 text_width,
+                                 text_height)
 
         painter.drawText(text_rect,
                          QtCore.Qt.AlignCenter,
@@ -342,7 +352,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
     def hoverEnterEvent(self, event):
         if self._params:
             text = 'Parameters:\n'
-            for k,v in self._params.items():
+            for k, v in self._params.items():
                 text += '  ' + k + ' -> ' + str(v) + '\n'
             text = text[:-1]
         else:
@@ -373,12 +383,12 @@ class NodeItem(QtWidgets.QGraphicsObject):
     def width(self):
         ret = self._base_width
 
-        for name,item in self._topic_attrs.items():
+        for name, item in self._topic_attrs.items():
             width = item.width()
             if width > ret:
                 ret = width
 
-        for name,item in self._service_attrs.items():
+        for name, item in self._service_attrs.items():
             width = item.width()
             if width > ret:
                 ret = width
@@ -392,6 +402,9 @@ class NodeItem(QtWidgets.QGraphicsObject):
             ret = ret + self._attr_height * num_attrs + self._node_border + 0.5 * self._radius
 
         return int(ret)
+
+    def last_index(self):
+        return len(self._topic_attrs) + len(self._service_attrs) + len(self._action_attrs)
 
     def reindex_attributes(self):
         index = 0
@@ -409,7 +422,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
     def add_topic_attribute(self, attr_name, is_publisher):
         if attr_name not in self._topic_attrs:
-            self._topic_attrs[attr_name] = TopicAttrItem(self, attr_name, len(self._topic_attrs) + len(self._service_attrs))
+            self._topic_attrs[attr_name] = TopicAttrItem(self, attr_name, self.last_index())
 
         if is_publisher:
             self._topic_attrs[attr_name].set_has_publisher(True)
@@ -424,7 +437,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
         return None
 
     def remove_topic_attribute(self, attr_name, is_publisher):
-        if not attr_name in self._topic_attrs:
+        if attr_name not in self._topic_attrs:
             return
 
         if is_publisher:
@@ -432,7 +445,9 @@ class NodeItem(QtWidgets.QGraphicsObject):
         else:
             self._topic_attrs[attr_name].set_has_subscriber(False)
 
-        if not self._topic_attrs[attr_name].get_has_publisher() and not self._topic_attrs[attr_name].get_has_subscriber():
+        has_pub = self._topic_attrs[attr_name].get_has_publisher()
+        has_sub = self._topic_attrs[attr_name].get_has_subscriber()
+        if not has_pub and not has_sub:
             self._topic_attrs[attr_name].setVisible(False)
             del self._topic_attrs[attr_name]
 
@@ -440,7 +455,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
     def add_service_attribute(self, attr_name, is_client):
         if attr_name not in self._service_attrs:
-            self._service_attrs[attr_name] = ServiceAttrItem(self, attr_name, len(self._topic_attrs) + len(self._service_attrs))
+            self._service_attrs[attr_name] = ServiceAttrItem(self, attr_name, self.last_index())
 
         if is_client:
             self._service_attrs[attr_name].set_has_client(True)
@@ -455,7 +470,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
         return None
 
     def remove_service_attribute(self, attr_name, is_client):
-        if not attr_name in self._service_attrs:
+        if attr_name not in self._service_attrs:
             return
 
         if is_client:
@@ -463,7 +478,9 @@ class NodeItem(QtWidgets.QGraphicsObject):
         else:
             self._service_attrs[attr_name].set_has_server(False)
 
-        if not self._service_attrs[attr_name].get_has_client() and not self._service_attrs[attr_name].get_has_server():
+        has_client = self._service_attrs[attr_name].get_has_client()
+        has_server = self._service_attrs[attr_name].get_has_server()
+        if not has_client and not has_server:
             self._service_attrs[attr_name].setVisible(False)
             del self._service_attrs[attr_name]
 
@@ -471,7 +488,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
     def add_action_attribute(self, attr_name, is_client):
         if attr_name not in self._action_attrs:
-            self._action_attrs[attr_name] = ActionAttrItem(self, attr_name, len(self._topic_attrs) + len(self._action_attrs))
+            self._action_attrs[attr_name] = ActionAttrItem(self, attr_name, self.last_index())
 
         if is_client:
             self._action_attrs[attr_name].set_has_client(True)
@@ -486,7 +503,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
         return None
 
     def remove_action_attribute(self, attr_name, is_client):
-        if not attr_name in self._action_attrs:
+        if attr_name not in self._action_attrs:
             return
 
         if is_client:
@@ -494,7 +511,9 @@ class NodeItem(QtWidgets.QGraphicsObject):
         else:
             self._action_attrs[attr_name].set_has_server(False)
 
-        if not self._action_attrs[attr_name].get_has_client() and not self._action_attrs[attr_name].get_has_server():
+        has_client = self._action_attrs[attr_name].get_has_client()
+        has_server = self._action_attrs[attr_name].get_has_server()
+        if not has_client and not has_server:
             self._action_attrs[attr_name].setVisible(False)
             del self._action_attrs[attr_name]
 
@@ -526,10 +545,11 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
 
 class NetworkScene(QtWidgets.QGraphicsScene):
+
     new_graph_signal = QtCore.pyqtSignal(list, list, list, name='newGraph')
     new_node_params_signal = QtCore.pyqtSignal(str, dict, name='newNodeParams')
     new_lifecycle_state_signal = QtCore.pyqtSignal(str, str, name='newLifecycleState')
-    new_component_manager_nodes_signal = QtCore.pyqtSignal(str, list, name='newComponentManagerNodes')
+    new_component_nodes_signal = QtCore.pyqtSignal(str, list, name='newComponentManagerNodes')
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -546,7 +566,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
         self._brush = QtGui.QBrush()
         self._brush.setStyle(QtCore.Qt.SolidPattern)
-        self._brush.setColor(convert_data_to_color([40, 40,40, 255]))
+        self._brush.setColor(convert_data_to_color([40, 40, 40, 255]))
 
         self._pen = QtGui.QPen()
         self._pen.setColor(convert_data_to_color([50, 50, 50, 255]))
@@ -707,7 +727,8 @@ class NetworkScene(QtWidgets.QGraphicsScene):
             networkx_node_graph.add_edges_from([(from_node, to_node)])
 
             full_topic_name = e.connection_name + ': ' + e.connection_type
-            visible_topic = self._show_hidden_topics or not topic_is_hidden(e.connection_name, e.connection_type)
+            visible_topic = self._show_hidden_topics or \
+                not topic_is_hidden(e.connection_name, e.connection_type)
 
             if from_node is not None:
                 added_node = self.add_node(from_node) or added_node
@@ -739,7 +760,8 @@ class NetworkScene(QtWidgets.QGraphicsScene):
             networkx_node_graph.add_edges_from([(from_node, to_node)])
 
             full_service_name = e.connection_name + ': ' + e.connection_type
-            visible_service = self._show_hidden_services or not service_is_hidden(e.connection_name, e.connection_type)
+            visible_service = self._show_hidden_services or \
+                not service_is_hidden(e.connection_name, e.connection_type)
 
             if from_node is not None:
                 added_node = self.add_node(from_node) or added_node
@@ -802,7 +824,10 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
         if added_node or nodes_to_remove:
             # TODO(clalancette): These hard-coded values aren't very good
-            pos = networkx.spring_layout(networkx_node_graph, center=(999.0, 999.0), scale=300.0, k=300.0)
+            pos = networkx.spring_layout(networkx_node_graph,
+                                         center=(999.0, 999.0),
+                                         scale=300.0,
+                                         k=300.0)
 
             for name, item in self._nodes.items():
                 self._animations_waiting.add(name)
@@ -848,11 +873,12 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
 
 class NodeGraphicsView(QtWidgets.QGraphicsView):
-    def __init__(self, parent):
+
+    def __init__(self, parent, ros_network):
         super().__init__(parent)
 
         # Hold onto a reference to the ROS 2 network
-        self._ros_network = ROSGraph()
+        self._ros_network = ros_network
         self._topic_edges = []
         self._service_edges = []
         self._action_edges = []
@@ -918,8 +944,11 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def get_new_edges(self):
         start = time.time()
-        topic_edges, service_edges, action_edges, node_to_lifecycle, node_to_component_manager = self._ros_network.get_edges()
-        if topic_edges != self._topic_edges or service_edges != self._service_edges or action_edges != self._action_edges:
+        (topic_edges, service_edges, action_edges, node_to_lifecycle,
+         node_to_component_manager) = self._ros_network.get_edges()
+        if topic_edges != self._topic_edges or \
+           service_edges != self._service_edges or \
+           action_edges != self._action_edges:
             self._topic_edges = topic_edges
             self._service_edges = service_edges
             self._action_edges = action_edges
@@ -964,20 +993,24 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
 # TODO(clalancette): Show nodes that have no topics
 
+
 def main():
     app = QtWidgets.QApplication([])
 
     # Note that we set this up *before* calling rclpy.init()
     # so that we don't override ROS signal handlers
     def do_shutdown(a, b):
-        network.shutdown()
+        ros_network.shutdown()
         app.quit()
     signal.signal(signal.SIGINT, do_shutdown)
 
-    gv = NodeGraphicsView(None)
+    ros_network = ROSGraph()
+
+    gv = NodeGraphicsView(None, ros_network)
     gv.show()
 
     return app.exec_()
+
 
 if __name__ == '__main__':
     sys.exit(main())

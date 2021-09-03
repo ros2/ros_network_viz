@@ -15,27 +15,27 @@
 import threading
 import time
 
+import composition_interfaces.srv
+import lifecycle_msgs.msg
+import lifecycle_msgs.srv
+import rcl_interfaces.msg
+import rcl_interfaces.srv
 import rclpy
 import rclpy.action
 import rclpy.node
 import rclpy.topic_or_service_is_hidden
-import rcl_interfaces.msg
-import rcl_interfaces.srv
-import lifecycle_msgs.msg
-import lifecycle_msgs.srv
-import composition_interfaces.srv
 
 
-DEFAULT_IGNORED_TOPICS = (
+IGNORED_TOPICS = (
     ('/parameter_events', 'rcl_interfaces/msg/ParameterEvent'),
     ('/rosout', 'rcl_interfaces/msg/Log'),
 )
 
-DEFAULT_LIFECYCLE_IGNORED_TOPICS = (
+LIFECYCLE_IGNORED_TOPICS = (
     ('/transition_event', 'lifecycle_msgs/msg/TransitionEvent'),
 )
 
-DEFAULT_IGNORED_SERVICES = (
+IGNORED_SERVICES = (
     ('/describe_parameters', 'rcl_interfaces/srv/DescribeParameters'),
     ('/get_parameter_types', 'rcl_interfaces/srv/GetParameterTypes'),
     ('/get_parameters', 'rcl_interfaces/srv/GetParameters'),
@@ -44,7 +44,7 @@ DEFAULT_IGNORED_SERVICES = (
     ('/set_parameters_atomically', 'rcl_interfaces/srv/SetParametersAtomically'),
 )
 
-DEFAULT_LIFECYCLE_IGNORED_SERVICES = (
+LIFECYCLE_IGNORED_SERVICES = (
     ('/change_state', 'lifecycle_msgs/srv/ChangeState'),
     ('/get_available_states', 'lifecycle_msgs/srv/GetAvailableStates'),
     ('/get_available_transitions', 'lifecycle_msgs/srv/GetAvailableTransitions'),
@@ -60,11 +60,11 @@ def topic_is_hidden(name, topic_type):
 
     # But then also look through our hard-coded list to skip common topics
     # that don't start with an underscore
-    for ignore_topic,ignore_type in DEFAULT_IGNORED_TOPICS:
+    for ignore_topic, ignore_type in IGNORED_TOPICS:
         if name.startswith(ignore_topic) and ignore_type == topic_type:
             return True
 
-    for ignore_topic,ignore_type in DEFAULT_LIFECYCLE_IGNORED_TOPICS:
+    for ignore_topic, ignore_type in LIFECYCLE_IGNORED_TOPICS:
         if name.endswith(ignore_topic) and ignore_type == topic_type:
             return True
 
@@ -78,7 +78,7 @@ def service_is_hidden(name, service_type):
 
     # But then also look through our hard-coded list to skip common services
     # that don't start with an underscore
-    for ignore_service,ignore_type in DEFAULT_IGNORED_SERVICES + DEFAULT_LIFECYCLE_IGNORED_SERVICES:
+    for ignore_service, ignore_type in IGNORED_SERVICES + LIFECYCLE_IGNORED_SERVICES:
         if name.endswith(ignore_service) and ignore_type == service_type:
             return True
 
@@ -117,6 +117,7 @@ def get_ros_parameter_value(parameter_value):
 
 
 class ROSNodeEdge:
+
     __slots__ = ('from_node', 'to_node', 'connection_name', 'connection_type')
 
     def __init__(self, from_node, to_node, connection_name, connection_type):
@@ -126,12 +127,18 @@ class ROSNodeEdge:
         self.connection_type = connection_type
 
     def __eq__(self, other):
-        return self.from_node == other.from_node and self.to_node == other.to_node and self.connection_name == other.connection_name and self.connection_type == other.connection_type
+        return self.from_node == other.from_node and \
+            self.to_node == other.to_node and \
+            self.connection_name == other.connection_name and \
+            self.connection_type == other.connection_type
 
     def __lt__(self, other):
         # We don't really care what the order of the nodes in when we
         # sort, we just care that it is stable.
-        return self.from_node < other.from_node and self.to_node < other.to_node and self.connection_name < other.connection_name and self.connection_type < other.connection_type
+        return self.from_node < other.from_node and \
+            self.to_node < other.to_node and \
+            self.connection_name < other.connection_name and \
+            self.connection_type < other.connection_type
 
     def __repr__(self):
         from_print = self.from_node
@@ -144,6 +151,7 @@ class ROSNodeEdge:
 
 
 class ROSAsyncServiceStateMachine:
+
     NEEDS_CLIENT = 1
     NEEDS_CLIENT_READY = 2
     NEEDS_RESPONSE = 3
@@ -207,8 +215,12 @@ class ROSAsyncServiceStateMachine:
 
         return self._result
 
+    def has_initial_response(self):
+        return self._state == self.HAS_INITIAL_RESPONSE
+
 
 class ROSParameterStateMachine:
+
     def __init__(self, rosnode, node_name):
         self._list_state_machine = ROSAsyncServiceStateMachine(rosnode,
                                                                node_name,
@@ -237,16 +249,18 @@ class ROSParameterStateMachine:
 
     def step(self):
         list_param_response = self._list_state_machine.step()
-        if self._list_state_machine._state == ROSAsyncServiceStateMachine.HAS_INITIAL_RESPONSE and list_param_response:
+        if self._list_state_machine.has_initial_response() and list_param_response:
             self._param_names = list_param_response.result.names
 
             get_params_response = self._get_state_machine.step()
-            if self._get_state_machine._state == ROSAsyncServiceStateMachine.HAS_INITIAL_RESPONSE and get_params_response:
+            if self._get_state_machine.has_initial_response() and get_params_response:
                 self._parameters_lock.acquire()
-                # TODO(clalancette): what happens if the get_params_response is shorter than the parameter names?
+                # TODO(clalancette): what happens if the get_params_response is
+                # shorter than the parameter names?
                 for i, name in enumerate(list_param_response.result.names):
-                    if not name in self._parameters:
-                        self._parameters[name] = get_ros_parameter_value(get_params_response.values[i])
+                    if name not in self._parameters:
+                        val = get_ros_parameter_value(get_params_response.values[i])
+                        self._parameters[name] = val
                 self._parameters_lock.release()
 
         return self._parameters
@@ -263,18 +277,19 @@ class ROSParameterStateMachine:
 
 
 class ROSLifecycleStateMachine:
+
     def __init__(self, rosnode, node_name):
         # TODO(clalancette): We are never destroying this
-        self._lifecycle_transition_sub = rosnode.create_subscription(lifecycle_msgs.msg.TransitionEvent,
-                                                                     node_name + '/transition_event',
-                                                                     self.lifecycle_transition_cb,
-                                                                     10)
+        self._lc_transition_sub = rosnode.create_subscription(lifecycle_msgs.msg.TransitionEvent,
+                                                              node_name + '/transition_event',
+                                                              self.lifecycle_transition_cb,
+                                                              10)
 
-        self._lifecycle_state_machine = ROSAsyncServiceStateMachine(rosnode,
-                                                                    node_name,
-                                                                    lifecycle_msgs.srv.GetState,
-                                                                    self.create_lifecycle_request,
-                                                                    'get_state')
+        self._lc_state_machine = ROSAsyncServiceStateMachine(rosnode,
+                                                             node_name,
+                                                             lifecycle_msgs.srv.GetState,
+                                                             self.create_lifecycle_request,
+                                                             'get_state')
 
         self._lifecycle_state = None
         self._lifecycle_state_lock = threading.Lock()
@@ -283,8 +298,8 @@ class ROSLifecycleStateMachine:
         return lifecycle_msgs.srv.GetState.Request()
 
     def step(self):
-        lifecycle_state_response = self._lifecycle_state_machine.step()
-        if self._lifecycle_state_machine._state == ROSAsyncServiceStateMachine.HAS_INITIAL_RESPONSE and lifecycle_state_response:
+        lifecycle_state_response = self._lc_state_machine.step()
+        if self._lc_state_machine.has_initial_response() and lifecycle_state_response:
             self._lifecycle_state_lock.acquire()
             if self._lifecycle_state is None:
                 self._lifecycle_state = lifecycle_state_response.current_state.label
@@ -299,16 +314,19 @@ class ROSLifecycleStateMachine:
 
 
 class ROSComponentManagerListNodesStateMachine:
+
     def __init__(self, rosnode, node_name):
 
         # TODO(clalancette): Having to use periodic refresh sucks; it puts a lot
         # more load on the the network.  But there isn't a notification
         # mechanism for when the list of nodes changes
-        self._component_state_machine = ROSAsyncServiceStateMachine(rosnode,
-                                                                    node_name,
-                                                                    composition_interfaces.srv.ListNodes,
-                                                                    self.create_list_nodes_request,
-                                                                    '_container/list_nodes', 5.0)
+        self._comp_state_machine = ROSAsyncServiceStateMachine(
+            rosnode,
+            node_name,
+            composition_interfaces.srv.ListNodes,
+            self.create_list_nodes_request,
+            '_container/list_nodes',
+            5.0)
 
         self._nodes = []
 
@@ -316,14 +334,15 @@ class ROSComponentManagerListNodesStateMachine:
         return composition_interfaces.srv.ListNodes.Request()
 
     def step(self):
-        list_nodes_response = self._component_state_machine.step()
-        if self._component_state_machine._state == ROSAsyncServiceStateMachine.HAS_INITIAL_RESPONSE and list_nodes_response:
+        list_nodes_response = self._comp_state_machine.step()
+        if self._comp_state_machine.has_initial_response() and list_nodes_response:
             self._nodes = list_nodes_response.full_node_names
 
         return self._nodes
 
 
 class ROSGraph:
+
     def __init__(self):
         rclpy.init()
         self._node = rclpy.create_node('rqt_network')
@@ -349,11 +368,16 @@ class ROSGraph:
 
         node_full_name = create_node_namespace(name, namespace)
 
-        for topic_name, topic_types in self._node.get_publisher_names_and_types_by_node(name, namespace):
+        pubs = self._node.get_publisher_names_and_types_by_node(name, namespace)
+        for topic_name, topic_types in pubs:
             had_subscriber = False
             for topic_info in self._node.get_subscriptions_info_by_topic(topic_name):
-                sub_node_full_name = create_node_namespace(topic_info.node_name, topic_info.node_namespace)
-                e = ROSNodeEdge(node_full_name, sub_node_full_name, topic_name, topic_info.topic_type)
+                sub_node_full_name = create_node_namespace(topic_info.node_name,
+                                                           topic_info.node_namespace)
+                e = ROSNodeEdge(node_full_name,
+                                sub_node_full_name,
+                                topic_name,
+                                topic_info.topic_type)
                 if node_full_name != sub_node_full_name and e not in edges:
                     edges.append(e)
                     had_subscriber = True
@@ -362,11 +386,15 @@ class ROSGraph:
                 for topic_type in topic_types:
                     edges.append(ROSNodeEdge(node_full_name, None, topic_name, topic_type))
 
-        for topic_name, topic_types in self._node.get_subscriber_names_and_types_by_node(name, namespace):
+        subs = self._node.get_subscriber_names_and_types_by_node(name, namespace)
+        for topic_name, topic_types in subs:
             had_publisher = False
             for topic_info in self._node.get_publishers_info_by_topic(topic_name):
-                pub_node_full_name = create_node_namespace(topic_info.node_name, topic_info.node_namespace)
-                e = ROSNodeEdge(pub_node_full_name, node_full_name, topic_name, topic_info.topic_type)
+                pub_node_full_name = create_node_namespace(topic_info.node_name,
+                                                           topic_info.node_namespace)
+                e = ROSNodeEdge(pub_node_full_name,
+                                node_full_name, topic_name,
+                                topic_info.topic_type)
                 if node_full_name != pub_node_full_name and e not in edges:
                     edges.append(e)
                     had_publisher = True
@@ -382,19 +410,21 @@ class ROSGraph:
 
         node_full_name = create_node_namespace(name, namespace)
 
-        if not node_full_name in node_to_lifecycle:
+        if node_full_name not in node_to_lifecycle:
             node_to_lifecycle[node_full_name] = False
 
-        if not node_full_name in node_to_component_manager:
+        if node_full_name not in node_to_component_manager:
             node_to_component_manager[node_full_name] = False
 
-        for service_name, service_types in self._node.get_service_names_and_types_by_node(name, namespace):
+        servers = self._node.get_service_names_and_types_by_node(name, namespace)
+        for service_name, service_types in servers:
             for service_type in service_types:
                 edges.append(ROSNodeEdge(None, node_full_name, service_name, service_type))
                 if 'get_state' in service_name and service_type == 'lifecycle_msgs/srv/GetState':
                     node_to_lifecycle[node_full_name] = True
 
-                if 'list_nodes' in service_name and service_type == 'composition_interfaces/srv/ListNodes':
+                if 'list_nodes' in service_name and \
+                   service_type == 'composition_interfaces/srv/ListNodes':
                     node_to_component_manager[node_full_name] = True
 
         return edges
@@ -404,7 +434,10 @@ class ROSGraph:
 
         node_full_name = create_node_namespace(name, namespace)
 
-        for action_name, action_types in rclpy.action.get_action_server_names_and_types_by_node(self._node, name, namespace):
+        actions = rclpy.action.get_action_server_names_and_types_by_node(self._node,
+                                                                         name,
+                                                                         namespace)
+        for action_name, action_types in actions:
             for action_type in action_types:
                 edges.append(ROSNodeEdge(None, node_full_name, action_name, action_type))
 
@@ -421,7 +454,10 @@ class ROSGraph:
             try:
                 topic_edges.extend(self.get_topic_edges(name, namespace))
 
-                service_edges.extend(self.get_service_edges(name, namespace, node_to_lifecycle, node_to_component_manager))
+                service_edges.extend(self.get_service_edges(name,
+                                                            namespace,
+                                                            node_to_lifecycle,
+                                                            node_to_component_manager))
 
                 action_edges.extend(self.get_action_edges(name, namespace))
 
@@ -435,27 +471,39 @@ class ROSGraph:
             node_full_name = create_node_namespace(name, namespace)
 
             try:
-                for service_name, service_types in self._node.get_client_names_and_types_by_node(name, namespace):
+                for service_name, service_types in \
+                  self._node.get_client_names_and_types_by_node(name, namespace):
                     for service_type in service_types:
                         client_had_server = False
                         for e in service_edges:
-                            if service_name == e.connection_name and service_type == e.connection_type:
+                            if service_name == e.connection_name and \
+                               service_type == e.connection_type:
                                 e.from_node = node_full_name
                                 client_had_server = True
 
                         if not client_had_server:
-                            service_edges.append(ROSNodeEdge(node_full_name, None, service_name, service_type))
+                            service_edges.append(ROSNodeEdge(node_full_name,
+                                                             None,
+                                                             service_name,
+                                                             service_type))
 
-                for action_name, action_types in rclpy.action.get_action_client_names_and_types_by_node(self._node, name, namespace):
+                for action_name, action_types in \
+                    rclpy.action.get_action_client_names_and_types_by_node(self._node,
+                                                                           name,
+                                                                           namespace):
                     for action_type in action_types:
                         action_client_had_server = False
                         for e in action_edges:
-                            if action_name == e.connection_name and action_type == e.connection_type:
+                            if action_name == e.connection_name and \
+                               action_type == e.connection_type:
                                 e.from_node = node_full_name
                                 action_client_had_server = True
 
                         if not action_client_had_server:
-                            action_edges.append(ROSNodeEdge(node_full_name, None, action_name, action_type))
+                            action_edges.append(ROSNodeEdge(node_full_name,
+                                                            None,
+                                                            action_name,
+                                                            action_type))
 
             except rclpy.node.NodeNameNonExistentError:
                 # It's possible that the node exited between when we saw it
@@ -463,7 +511,11 @@ class ROSGraph:
                 # just skip the processing.
                 pass
 
-        return topic_edges, service_edges, action_edges, node_to_lifecycle, node_to_component_manager
+        return (topic_edges,
+                service_edges,
+                action_edges,
+                node_to_lifecycle,
+                node_to_component_manager)
 
     def parameter_event_cb(self, msg):
         if msg.node in self._param_clients:
@@ -503,7 +555,8 @@ class ROSGraph:
         # Subsequent calls may get the data.
 
         if node_name not in self._component_manager_nodes_clients:
-            self._component_manager_nodes_clients[node_name] = ROSComponentManagerListNodesStateMachine(self._node, node_name)
+            cm = ROSComponentManagerListNodesStateMachine(self._node, node_name)
+            self._component_manager_nodes_clients[node_name] = cm
 
         return self._component_manager_nodes_clients[node_name].step()
 

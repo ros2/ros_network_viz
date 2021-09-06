@@ -252,7 +252,6 @@ class NodeItem(QtWidgets.QGraphicsObject):
         self._topic_attrs = {}
         self._service_attrs = {}
         self._action_attrs = {}
-        self._params = {}
         self._managed_nodes = []
 
         self._attr_height = 30
@@ -262,7 +261,6 @@ class NodeItem(QtWidgets.QGraphicsObject):
         self._node_border = 2
 
         self.setZValue(1)
-        self.setAcceptHoverEvents(True)
 
         self.setFlag(QtWidgets.QGraphicsObject.ItemIsMovable)
         self.setFlag(QtWidgets.QGraphicsObject.ItemIsSelectable)
@@ -287,7 +285,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
         self._node_text_font = QtGui.QFont('Arial', 12, QtGui.QFont.Bold)
 
-        self._node_info_box = None
+        self.setToolTip('No Parameters')
 
         self._anim = QtCore.QPropertyAnimation(self, b'pos')
 
@@ -332,53 +330,10 @@ class NodeItem(QtWidgets.QGraphicsObject):
                          QtCore.Qt.AlignCenter,
                          name)
 
-        # TODO(clalancette): This info box never really gets destroyed, and
-        # seems to "flicker" a lot on screen.  Also it is always rendered
-        # directly in the middle of the node, rather than following the mouse.
-        # Can we make this nicer?
-        if self._node_info_box is not None:
-            rect = self.boundingRect()
-            center = QtCore.QPointF(rect.x() + rect.width() * 0.5,
-                                    rect.y() + rect.height() * 0.5)
-
-            self._node_info_box.setPos(self.mapToScene(center))
-
     # PyQt method override
     def mouseMoveEvent(self, event):
         self.scene().update_connections()
         super().mouseMoveEvent(event)
-
-    # PyQt method override
-    def hoverEnterEvent(self, event):
-        if self._params:
-            text = 'Parameters:\n'
-            for k, v in self._params.items():
-                text += '  ' + k + ' -> ' + str(v) + '\n'
-            text = text[:-1]
-        else:
-            # TODO(clalancette): Maybe show the difference between there are no
-            # actual parameters, and the fact that we can't fetch them
-            text = 'No Parameters'
-
-        label = QtWidgets.QLabel(text)
-        label_proxy = QtWidgets.QGraphicsProxyWidget()
-        label_proxy.setWidget(label)
-
-        layout = QtWidgets.QGraphicsLinearLayout(QtCore.Qt.Vertical)
-        layout.addItem(label_proxy)
-
-        self._node_info_box = QtWidgets.QGraphicsWidget()
-        self._node_info_box.setZValue(2)
-        self._node_info_box.setLayout(layout)
-        self.scene().addItem(self._node_info_box)
-
-        super().hoverEnterEvent(event)
-
-    # PyQt method override
-    def hoverLeaveEvent(self, event):
-        if self._node_info_box:
-            self.scene().removeItem(self._node_info_box)
-        super().hoverLeaveEvent(event)
 
     def width(self):
         ret = self._base_width
@@ -520,7 +475,17 @@ class NodeItem(QtWidgets.QGraphicsObject):
         self.reindex_attributes()
 
     def update_params(self, new_params):
-        self._params = new_params
+        if new_params:
+            text = 'Parameters:\n'
+            for k, v in new_params.items():
+                text += '  ' + k + ' -> ' + str(v) + '\n'
+            text = text[:-1]
+        else:
+            # TODO(clalancette): Maybe show the difference between there are no
+            # actual parameters, and the fact that we can't fetch them
+            text = 'No Parameters'
+
+        self.setToolTip(text)
 
     def update_lifecycle_state(self, new_state):
         self._lifecycle_state = new_state

@@ -877,6 +877,19 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
         self._timer.timeout.connect(self.get_new_edges)
         self._timer.start(500)
 
+    def wheelEvent(self, event):
+        self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
+
+        inFactor = 1.15
+        outFactor = 1 / inFactor
+
+        if event.angleDelta().y() > 0:
+            zoomFactor = inFactor
+        else:
+            zoomFactor = outFactor
+
+        self.scale(zoomFactor, zoomFactor)
+
     def update_parameters(self, node_name):
         if node_name is None:
             return

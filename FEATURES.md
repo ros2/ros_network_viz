@@ -6,7 +6,7 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 # Features
 
 * [ ] Show a legend/help for describing what everything does
-* [ ] Allow zooming in or out on the entire scene
+* [x] Allow zooming in or out on the entire scene
 
 ## Nodes
 

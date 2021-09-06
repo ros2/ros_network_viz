@@ -870,6 +870,9 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
         self.setMouseTracking(True)
 
+        self.selection_box = QtWidgets.QRubberBand(QtWidgets.QRubberBand.Rectangle, self)
+        self.selection_origin = None
+
         # TODO(clalancette): This sucks that we are polling to get changes to
         # the ROS graph.  Unfortunately the graph APIs are not available in
         # Python, so this is the best we can do for now.
@@ -877,6 +880,7 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
         self._timer.timeout.connect(self.get_new_edges)
         self._timer.start(500)
 
+    # PyQt method override
     def wheelEvent(self, event):
         self.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
 
@@ -889,6 +893,42 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
             zoomFactor = outFactor
 
         self.scale(zoomFactor, zoomFactor)
+
+        super().wheelEvent(event)
+
+    # PyQt method override
+    def mousePressEvent(self, event):
+        if (event.button() == QtCore.Qt.LeftButton and
+                event.modifiers() == QtCore.Qt.NoModifier and
+                self.scene().itemAt(self.mapToScene(event.pos()), QtGui.QTransform()) is None):
+            self.selection_origin = event.pos()
+            self.selection_box.setGeometry(QtCore.QRect(event.pos(), QtCore.QSize()))
+            self.selection_box.show()
+
+        super().mousePressEvent(event)
+
+    # PyQt method override
+    def mouseMoveEvent(self, event):
+        if self.selection_origin is not None:
+            rect = QtCore.QRect(self.selection_origin, event.pos()).normalized()
+            self.selection_box.setGeometry(rect)
+
+        super().mouseMoveEvent(event)
+
+    # PyQt method override
+    def mouseReleaseEvent(self, event):
+        if self.selection_origin is not None:
+            rect = QtCore.QRect(self.selection_origin, event.pos()).normalized()
+            self.selection_box.setGeometry(rect)
+
+            painter_path = QtGui.QPainterPath()
+            rect = self.mapToScene(self.selection_box.geometry())
+            painter_path.addPolygon(rect)
+            self.selection_box.hide()
+            self.scene().setSelectionArea(painter_path)
+            self.selection_origin = None
+
+        super().mouseReleaseEvent(event)
 
     def update_parameters(self, node_name):
         if node_name is None:

@@ -12,7 +12,6 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 
 * [x] Show all nodes in a ROS 2 graph (including those with no topics or services)
 * [x] Automatically update the graph as nodes come and go
-* [x] Let the user manually move the nodes around
 * [x] Have an option to "pause" automatic graph updates
 * [x] Hide hidden nodes by default (with option to turn on)
 * [x] Hide rqt_network node by default (with option to turn on)
@@ -37,7 +36,6 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 * [x] Draw a line between the published and subscribed topics in the network
 * [x] Hide default topics like /parameter_events, /rosout by default (with option to turn on)
 * [x] Show the type for each topic
-* [ ] Have the ability to hide the topic type
 * [ ] Show the Quality-of-Service settings for each topic
 * [ ] Show the rate (hz) at which a topic is publishing data
 * [ ] Show the bandwidth that a topic is using

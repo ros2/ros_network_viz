@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import signal
 import sys
 import time
@@ -31,7 +30,7 @@ def convert_data_to_color(data):
     raise Exception('Invalid color, must be list of 3 or 4 items')
 
 
-class ConnectionItem(QtWidgets.QGraphicsPathItem):
+class ConnectionLine(QtWidgets.QGraphicsPathItem):
 
     def __init__(self):
         super().__init__()
@@ -56,208 +55,20 @@ class ConnectionItem(QtWidgets.QGraphicsPathItem):
         self.setPath(path)
 
 
-class AttrItem(QtWidgets.QGraphicsItem):
+class NodeBox(QtWidgets.QGraphicsObject):
 
-    def __init__(self, parent, name, index):
-        super().__init__(parent)
-
-        self._name = name
-        self._index = index
-
-        self._has_right_ellipse = False
-        self._has_left_ellipse = False
-
-        self._bg_pen = QtGui.QPen()
-        self._bg_pen.setStyle(QtCore.Qt.SolidLine)
-        self._bg_pen.setColor(convert_data_to_color([0, 0, 0, 0]))
-
-        self._bg_brush = QtGui.QBrush()
-        self._bg_brush.setStyle(QtCore.Qt.SolidPattern)
-        self._bg_brush.setColor(convert_data_to_color([60, 60, 60, 255]))
-
-        self._ellipse_pen = QtGui.QPen()
-        self._ellipse_pen.setStyle(QtCore.Qt.SolidLine)
-
-        self._right_ellipse_brush = QtGui.QBrush()
-        self._right_ellipse_brush.setStyle(QtCore.Qt.SolidPattern)
-        self._right_ellipse_brush.setColor(convert_data_to_color([255, 155, 0, 255]))
-
-        self._left_ellipse_brush = QtGui.QBrush()
-        self._left_ellipse_brush.setStyle(QtCore.Qt.SolidPattern)
-        self._left_ellipse_brush.setColor(convert_data_to_color([0, 155, 255, 255]))
-
-        self._text_font = QtGui.QFont('Arial', 10, QtGui.QFont.Normal)
-        self._text_pen = QtGui.QPen()
-        self._text_pen.setColor(convert_data_to_color([220, 220, 220, 255]))
-
-    # PyQt method override
-    def boundingRect(self):
-        parent = self.parentItem()
-
-        ellipse_width = parent._attr_height / 2.0
-
-        if self._has_left_ellipse:
-            x = -ellipse_width / 2.0
-        else:
-            x = 0
-
-        if self._has_right_ellipse:
-            width = parent.width() + ellipse_width / 2.0
-        else:
-            width = parent.width()
-
-        y = parent._base_height - parent._radius + self._index * parent._attr_height
-
-        return QtCore.QRectF(x, y, width, parent._attr_height)
-
-    # PyQt method override
-    def paint(self, painter, option, widget):
-        parent = self.parentItem()
-
-        # First draw the background
-        x = int(parent._node_border / 2)
-        y = parent._base_height - parent._radius + self._index * parent._attr_height
-        width = parent.width() - parent._node_border
-        height = parent._attr_height
-        rect = QtCore.QRect(x, y, width, height)
-
-        painter.setPen(self._bg_pen)
-        painter.setBrush(self._bg_brush)
-
-        painter.drawRect(rect)
-
-        # Now draw the text
-        painter.setPen(self._text_pen)
-        painter.setFont(self._text_font)
-
-        text_rect = QtCore.QRect(rect.left() + parent._radius,
-                                 rect.top(),
-                                 rect.width() - 2 * parent._radius,
-                                 rect.height())
-        painter.drawText(text_rect, QtCore.Qt.AlignVCenter, self._name)
-
-        # Now draw the ellipses
-        painter.setPen(self._ellipse_pen)
-
-        if self._has_right_ellipse:
-            painter.setBrush(self._right_ellipse_brush)
-            painter.drawEllipse(self.ellipseRect(True))
-
-        if self._has_left_ellipse:
-            painter.setBrush(self._left_ellipse_brush)
-            painter.drawEllipse(self.ellipseRect(False))
-
-    def width(self):
-        metrics = QtGui.QFontMetrics(self._text_font)
-        return metrics.boundingRect(self._name).width() + 14
-
-    def ellipseRect(self, is_right):
-        parent = self.parentItem()
-
-        width = parent._attr_height / 2.0
-        height = parent._attr_height / 2.0
-
-        if is_right:
-            x = parent.width() - (width / 2.0)
-        else:
-            x = -width / 2.0
-
-        pixels_from_index = self._index * parent._attr_height
-        y = parent._base_height - parent._radius + parent._attr_height / 4 + pixels_from_index
-
-        return QtCore.QRectF(x, y, width, height)
-
-    def center(self, is_publisher):
-        rect = self.ellipseRect(is_publisher)
-        center = QtCore.QPointF(rect.x() + rect.width() * 0.5,
-                                rect.y() + rect.height() * 0.5)
-
-        return self.mapToScene(center)
-
-
-class TopicAttrItem(AttrItem):
-
-    def __init__(self, parent, name, index):
-        super().__init__(parent, name, index)
-
-        self._right_ellipse_brush.setColor(convert_data_to_color([255, 155, 0, 255]))
-        self._left_ellipse_brush.setColor(convert_data_to_color([0, 155, 255, 255]))
-        self._bg_brush.setColor(convert_data_to_color([60, 60, 60, 255]))
-
-    def set_has_publisher(self, has_pub):
-        self._has_right_ellipse = has_pub
-
-    def set_has_subscriber(self, has_sub):
-        self._has_left_ellipse = has_sub
-
-    def get_has_publisher(self):
-        return self._has_right_ellipse
-
-    def get_has_subscriber(self):
-        return self._has_left_ellipse
-
-
-class ServiceAttrItem(AttrItem):
-
-    def __init__(self, parent, name, index):
-        super().__init__(parent, name, index)
-
-        self._right_ellipse_brush.setColor(convert_data_to_color([255, 255, 255, 255]))
-        self._left_ellipse_brush.setColor(convert_data_to_color([0, 0, 0, 255]))
-        self._bg_brush.setColor(convert_data_to_color([160, 160, 160, 255]))
-
-    def set_has_client(self, has_client):
-        self._has_right_ellipse = has_client
-
-    def set_has_server(self, has_server):
-        self._has_left_ellipse = has_server
-
-    def get_has_client(self):
-        return self._has_right_ellipse
-
-    def get_has_server(self):
-        return self._has_left_ellipse
-
-
-class ActionAttrItem(AttrItem):
-
-    def __init__(self, parent, name, index):
-        super().__init__(parent, name, index)
-
-        self._right_ellipse_brush.setColor(convert_data_to_color([25, 25, 25, 255]))
-        self._left_ellipse_brush.setColor(convert_data_to_color([130, 130, 130, 255]))
-        self._bg_brush.setColor(convert_data_to_color([250, 120, 120, 255]))
-
-    def set_has_client(self, has_client):
-        self._has_right_ellipse = has_client
-
-    def set_has_server(self, has_server):
-        self._has_left_ellipse = has_server
-
-    def get_has_client(self):
-        return self._has_right_ellipse
-
-    def get_has_server(self):
-        return self._has_left_ellipse
-
-
-class NodeItem(QtWidgets.QGraphicsObject):
-
-    def __init__(self, name):
+    def __init__(self, name, is_lifecycle, is_component_manager):
         super().__init__()
 
         self._name = name
-
+        self._is_lifecycle = is_lifecycle
+        self._is_component_manager = is_component_manager
         self._lifecycle_state = None
-        self._topic_attrs = {}
-        self._service_attrs = {}
-        self._action_attrs = {}
+        self._params = {}
         self._managed_nodes = []
 
-        self._attr_height = 30
         self._radius = 10
         self._base_height = 25
-        self._base_width = 200
         self._node_border = 2
 
         self.setZValue(1)
@@ -267,7 +78,13 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
         self._brush = QtGui.QBrush()
         self._brush.setStyle(QtCore.Qt.SolidPattern)
-        self._brush.setColor(convert_data_to_color([80, 80, 80, 255]))
+        # TODO(clalancette): What happens if a node is both lifecycle *and* component manager?
+        if self._is_lifecycle:
+            self._brush.setColor(convert_data_to_color([25, 130, 25, 255]))
+        elif self._is_component_manager:
+            self._brush.setColor(convert_data_to_color([130, 25, 25, 255]))
+        else:
+            self._brush.setColor(convert_data_to_color([80, 80, 80, 255]))
 
         self._pen = QtGui.QPen()
         self._pen.setStyle(QtCore.Qt.SolidLine)
@@ -285,13 +102,25 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
         self._node_text_font = QtGui.QFont('Arial', 12, QtGui.QFont.Bold)
 
-        self.setToolTip('No Parameters')
+        metrics = QtGui.QFontMetrics(self._node_text_font)
+        text_width = metrics.boundingRect(self._name).width() + 14
+        text_height = metrics.boundingRect(self._name).height() + 14
+        height_margin = int((text_height - self._base_height) * 0.5)
+        self._base_width = text_width
+        self._text_rect = QtCore.QRect(0, -height_margin, text_width, text_height)
+
+        self.update_tooltip()
 
         self._anim = QtCore.QPropertyAnimation(self, b'pos')
 
     # PyQt method override
     def boundingRect(self):
-        return QtCore.QRectF(QtCore.QRect(0, 0, self.width(), self.height()))
+        return QtCore.QRectF(QtCore.QRect(0, 0, self._base_width, self._base_height))
+
+    # PyQt method override
+    def mouseMoveEvent(self, event):
+        self.scene().update_connections()
+        super().mouseMoveEvent(event)
 
     # PyQt method override
     def paint(self, painter, option, widget):
@@ -303,8 +132,8 @@ class NodeItem(QtWidgets.QGraphicsObject):
             painter.setPen(self._pen)
 
         painter.drawRoundedRect(0, 0,
-                                self.width(),
-                                self.height(),
+                                self._base_width,
+                                self._base_height,
                                 self._radius,
                                 self._radius)
 
@@ -313,187 +142,46 @@ class NodeItem(QtWidgets.QGraphicsObject):
         painter.setPen(self._text_pen)
         painter.setFont(self._node_text_font)
 
-        name = self._name
-        if self._lifecycle_state is not None:
-            name += ' (' + self._lifecycle_state + ')'
-
-        metrics = QtGui.QFontMetrics(painter.font())
-        text_width = metrics.boundingRect(name).width() + 14
-        text_height = metrics.boundingRect(name).height() + 14
-        margin = int((text_width - self.width()) * 0.5)
-        text_rect = QtCore.QRect(-margin,
-                                 -text_height,
-                                 text_width,
-                                 text_height)
-
-        painter.drawText(text_rect,
+        painter.drawText(self._text_rect,
                          QtCore.Qt.AlignCenter,
-                         name)
+                         self._name)
 
-    # PyQt method override
-    def mouseMoveEvent(self, event):
-        self.scene().update_connections()
-        super().mouseMoveEvent(event)
+    def update_tooltip(self):
+        text = ''
 
-    def width(self):
-        ret = self._base_width
+        if self._lifecycle_state is not None:
+            text += 'Lifecycle state: ' + self._lifecycle_state
 
-        for name, item in self._topic_attrs.items():
-            width = item.width()
-            if width > ret:
-                ret = width
+        if self._managed_nodes:
+            text += 'Managed Nodes:\n'
+            for n in self._managed_nodes:
+                text += '  ' + n + '\n'
+            text = text[:-1]
 
-        for name, item in self._service_attrs.items():
-            width = item.width()
-            if width > ret:
-                ret = width
-
-        return ret
-
-    def height(self):
-        ret = self._base_height
-        num_attrs = len(self._topic_attrs) + len(self._service_attrs)
-        if num_attrs > 0:
-            ret = ret + self._attr_height * num_attrs + self._node_border + 0.5 * self._radius
-
-        return int(ret)
-
-    def last_index(self):
-        return len(self._topic_attrs) + len(self._service_attrs) + len(self._action_attrs)
-
-    def reindex_attributes(self):
-        index = 0
-        for attr_name, item in self._topic_attrs.items():
-            item._index = index
-            index += 1
-
-        for attr_name, item in self._service_attrs.items():
-            item._index = index
-            index += 1
-
-        for attr_name, item in self._action_attrs.items():
-            item._index = index
-            index += 1
-
-    def add_topic_attribute(self, attr_name, is_publisher):
-        if attr_name not in self._topic_attrs:
-            self._topic_attrs[attr_name] = TopicAttrItem(self, attr_name, self.last_index())
-
-        if is_publisher:
-            self._topic_attrs[attr_name].set_has_publisher(True)
-        else:
-            self._topic_attrs[attr_name].set_has_subscriber(True)
-
-        self.reindex_attributes()
-
-    def get_topic_attribute(self, attr_name):
-        if attr_name in self._topic_attrs:
-            return self._topic_attrs[attr_name]
-        return None
-
-    def remove_topic_attribute(self, attr_name, is_publisher):
-        if attr_name not in self._topic_attrs:
-            return
-
-        if is_publisher:
-            self._topic_attrs[attr_name].set_has_publisher(False)
-        else:
-            self._topic_attrs[attr_name].set_has_subscriber(False)
-
-        has_pub = self._topic_attrs[attr_name].get_has_publisher()
-        has_sub = self._topic_attrs[attr_name].get_has_subscriber()
-        if not has_pub and not has_sub:
-            self._topic_attrs[attr_name].setVisible(False)
-            del self._topic_attrs[attr_name]
-
-        self.reindex_attributes()
-
-    def add_service_attribute(self, attr_name, is_client):
-        if attr_name not in self._service_attrs:
-            self._service_attrs[attr_name] = ServiceAttrItem(self, attr_name, self.last_index())
-
-        if is_client:
-            self._service_attrs[attr_name].set_has_client(True)
-        else:
-            self._service_attrs[attr_name].set_has_server(True)
-
-        self.reindex_attributes()
-
-    def get_service_attribute(self, attr_name):
-        if attr_name in self._service_attrs:
-            return self._service_attrs[attr_name]
-        return None
-
-    def remove_service_attribute(self, attr_name, is_client):
-        if attr_name not in self._service_attrs:
-            return
-
-        if is_client:
-            self._service_attrs[attr_name].set_has_client(False)
-        else:
-            self._service_attrs[attr_name].set_has_server(False)
-
-        has_client = self._service_attrs[attr_name].get_has_client()
-        has_server = self._service_attrs[attr_name].get_has_server()
-        if not has_client and not has_server:
-            self._service_attrs[attr_name].setVisible(False)
-            del self._service_attrs[attr_name]
-
-        self.reindex_attributes()
-
-    def add_action_attribute(self, attr_name, is_client):
-        if attr_name not in self._action_attrs:
-            self._action_attrs[attr_name] = ActionAttrItem(self, attr_name, self.last_index())
-
-        if is_client:
-            self._action_attrs[attr_name].set_has_client(True)
-        else:
-            self._action_attrs[attr_name].set_has_server(True)
-
-        self.reindex_attributes()
-
-    def get_action_attribute(self, attr_name):
-        if attr_name in self._action_attrs:
-            return self._action_attrs[attr_name]
-        return None
-
-    def remove_action_attribute(self, attr_name, is_client):
-        if attr_name not in self._action_attrs:
-            return
-
-        if is_client:
-            self._action_attrs[attr_name].set_has_client(False)
-        else:
-            self._action_attrs[attr_name].set_has_server(False)
-
-        has_client = self._action_attrs[attr_name].get_has_client()
-        has_server = self._action_attrs[attr_name].get_has_server()
-        if not has_client and not has_server:
-            self._action_attrs[attr_name].setVisible(False)
-            del self._action_attrs[attr_name]
-
-        self.reindex_attributes()
-
-    def update_params(self, new_params):
-        if new_params:
-            text = 'Parameters:\n'
-            for k, v in new_params.items():
+        if self._params:
+            if text:
+                text += '\n'
+            text += 'Parameters:\n'
+            for k, v in self._params.items():
                 text += '  ' + k + ' -> ' + str(v) + '\n'
             text = text[:-1]
-        else:
-            # TODO(clalancette): Maybe show the difference between there are no
-            # actual parameters, and the fact that we can't fetch them
+
+        if not text:
             text = 'No Parameters'
 
         self.setToolTip(text)
 
+    def update_params(self, new_params):
+        self._params = new_params
+        self.update_tooltip()
+
     def update_lifecycle_state(self, new_state):
         self._lifecycle_state = new_state
-        self._brush.setColor(convert_data_to_color([25, 130, 25, 255]))
+        self.update_tooltip()
 
-    def update_managed_nodes(self, managed_nodes):
-        self._managed_nodes = managed_nodes
-        self._brush.setColor(convert_data_to_color([130, 25, 25, 255]))
+    def update_managed_nodes(self, new_managed_nodes):
+        self._managed_nodes = new_managed_nodes
+        self.update_tooltip()
 
     def animation_finished(self):
         scene = self.scene()
@@ -508,23 +196,131 @@ class NodeItem(QtWidgets.QGraphicsObject):
         self._anim.finished.connect(self.animation_finished)
         self._anim.start()
 
+    def left(self):
+        rect = self.boundingRect()
+        return self.mapToScene(QtCore.QPointF(0, rect.y() + rect.height() * 0.5))
+
+    def right(self):
+        rect = self.boundingRect()
+        return self.mapToScene(QtCore.QPointF(rect.x() + rect.width(),
+                                              rect.y() + rect.height() * 0.5))
+
+
+class ConnectionBox(QtWidgets.QGraphicsObject):
+
+    def __init__(self, name, conn_type, bg_color):
+        super().__init__()
+
+        self._name = name
+
+        self._radius = 10
+        self._base_height = 25
+        self._node_border = 2
+
+        self.setZValue(1)
+
+        self.setToolTip("Type: " + conn_type)
+
+        self.setFlag(QtWidgets.QGraphicsObject.ItemIsMovable)
+        self.setFlag(QtWidgets.QGraphicsObject.ItemIsSelectable)
+
+        self._brush = QtGui.QBrush()
+        self._brush.setStyle(QtCore.Qt.SolidPattern)
+        self._brush.setColor(convert_data_to_color(bg_color))
+
+        self._pen = QtGui.QPen()
+        self._pen.setStyle(QtCore.Qt.SolidLine)
+        self._pen.setWidth(self._node_border)
+        self._pen.setColor(convert_data_to_color([50, 50, 50, 255]))
+
+        self._pen_sel = QtGui.QPen()
+        self._pen_sel.setStyle(QtCore.Qt.SolidLine)
+        self._pen_sel.setWidth(self._node_border)
+        self._pen_sel.setColor(convert_data_to_color([170, 80, 80, 255]))
+
+        self._text_pen = QtGui.QPen()
+        self._text_pen.setStyle(QtCore.Qt.SolidLine)
+        self._text_pen.setColor(convert_data_to_color([230, 230, 230, 255]))
+
+        self._node_text_font = QtGui.QFont('Arial', 10, QtGui.QFont.Normal)
+
+        metrics = QtGui.QFontMetrics(self._node_text_font)
+        text_width = metrics.boundingRect(self._name).width() + 14
+        text_height = metrics.boundingRect(self._name).height() + 14
+        height_margin = int((text_height - self._base_height) * 0.5)
+        self._base_width = text_width
+        self._text_rect = QtCore.QRect(0, -height_margin, text_width, text_height)
+
+        self._anim = QtCore.QPropertyAnimation(self, b'pos')
+
+    # PyQt method override
+    def boundingRect(self):
+        return QtCore.QRectF(QtCore.QRect(0, 0, self._base_width, self._base_height))
+
+    # PyQt method override
+    def mouseMoveEvent(self, event):
+        self.scene().update_connections()
+        super().mouseMoveEvent(event)
+
+    # PyQt method override
+    def paint(self, painter, option, widget):
+        # First draw the rounded rectangle the represents the node
+        painter.setBrush(self._brush)
+        if self.isSelected():
+            painter.setPen(self._pen_sel)
+        else:
+            painter.setPen(self._pen)
+
+        painter.drawRect(0, 0, self._base_width, self._base_height)
+
+        # Now draw the node name (and lifecycle state, if applicable) above the
+        # rectangle
+        painter.setPen(self._text_pen)
+        painter.setFont(self._node_text_font)
+
+        painter.drawText(self._text_rect,
+                         QtCore.Qt.AlignCenter,
+                         self._name)
+
+    def animation_finished(self):
+        scene = self.scene()
+        # the scene can be None if the Node was removed before the animation finished
+        if scene:
+            scene.complete_animation(self._name)
+
+    def set_position(self, x, y):
+        self._anim.setEndValue(QtCore.QPointF(x, y))
+        self._anim.setEasingCurve(QtCore.QEasingCurve.InOutCubic)
+        self._anim.setDuration(1000)
+        self._anim.finished.connect(self.animation_finished)
+        self._anim.start()
+
+    def left(self):
+        rect = self.boundingRect()
+        return self.mapToScene(QtCore.QPointF(0, rect.y() + rect.height() * 0.5))
+
+    def right(self):
+        rect = self.boundingRect()
+        return self.mapToScene(QtCore.QPointF(rect.x() + rect.width(),
+                                              rect.y() + rect.height() * 0.5))
+
 
 class NetworkScene(QtWidgets.QGraphicsScene):
 
-    new_graph_signal = QtCore.pyqtSignal(list, list, list, name='newGraph')
     new_node_params_signal = QtCore.pyqtSignal(str, dict, name='newNodeParams')
     new_lifecycle_state_signal = QtCore.pyqtSignal(str, str, name='newLifecycleState')
     new_component_nodes_signal = QtCore.pyqtSignal(str, list, name='newComponentManagerNodes')
 
+    new_nodes_signal = QtCore.pyqtSignal(list, name='newNodes')
+
     def __init__(self, parent):
         super().__init__(parent)
 
-        self._connections = {}
-        self._nodes = {}
-        self._topic_edges = []
-        self._service_edges = []
-        self._action_edges = []
         self._has_hidden_nodes = False
+
+        self._scene_items = {}
+        self._graph_nodes_list = []
+        self._connections = {}
         self._animations_waiting = set()
 
         self._grid_size = 36
@@ -574,10 +370,11 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         self._live_updates_action.triggered.connect(self.live_updates_toggle)
         self._right_click_menu.addAction(self._live_updates_action)
 
-        self.newGraph.connect(self.update_edges)
         self.newNodeParams.connect(self.update_node_params)
         self.newLifecycleState.connect(self.update_lifecycle_state)
         self.newComponentManagerNodes.connect(self.update_component_manager_nodes)
+
+        self.newNodes.connect(self.update_nodes)
 
     # PyQt method override
     def drawBackground(self, painter, rect):
@@ -609,194 +406,152 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         self._show_hidden_nodes = checked
         # We only do an update if there happen to be hidden nodes in the network
         if self._has_hidden_nodes:
-            self.update_edges(self._topic_edges, self._service_edges, self._action_edges)
+            self.update_nodes(self._graph_nodes_list)
 
     def hidden_rqt_network_toggle(self, checked):
         self._show_rqt_network_node = checked
-        self.update_edges(self._topic_edges, self._service_edges, self._action_edges)
+        self.update_nodes(self._graph_nodes_list)
 
     def hidden_topics_toggle(self, checked):
         self._show_hidden_topics = checked
-        self.update_edges(self._topic_edges, self._service_edges, self._action_edges)
+        self.update_nodes(self._graph_nodes_list)
 
     def hidden_services_toggle(self, checked):
         self._show_hidden_services = checked
-        self.update_edges(self._topic_edges, self._service_edges, self._action_edges)
+        self.update_nodes(self._graph_nodes_list)
 
     def live_updates_toggle(self, checked):
         self._live_updates = checked
-        self.update_edges(self._topic_edges, self._service_edges, self._action_edges)
+        self.update_nodes(self._graph_nodes_list)
 
-    def apply_node_options(self, from_node, to_node):
-        if from_node is not None and from_node.startswith('/_'):
-            self._has_hidden_nodes = True
-            if not self._show_hidden_nodes:
-                from_node = None
-
-        if to_node is not None and to_node.startswith('/_'):
-            self._has_hidden_nodes = True
-            if not self._show_hidden_nodes:
-                to_node = None
-
-        if not self._show_rqt_network_node:
-            if from_node == '/rqt_network':
-                from_node = None
-
-            if to_node == '/rqt_network':
-                to_node = None
-
-        return (from_node, to_node)
-
-    def add_node(self, node_name):
-        if node_name not in self._nodes:
-            self._nodes[node_name] = NodeItem(node_name)
-            self.addItem(self._nodes[node_name])
-            return True
-
-        return False
-
-    def add_topic(self, node_name, full_topic_name, is_publisher, visible_topic):
-        if visible_topic:
-            self._nodes[node_name].add_topic_attribute(full_topic_name, is_publisher)
-        else:
-            self._nodes[node_name].remove_topic_attribute(full_topic_name, is_publisher)
-
-    def add_service(self, node_name, full_service_name, is_client, visible_service):
-        if visible_service:
-            self._nodes[node_name].add_service_attribute(full_service_name, is_client)
-        else:
-            self._nodes[node_name].remove_service_attribute(full_service_name, is_client)
-
-    def add_action(self, node_name, full_action_name, is_client):
-        self._nodes[node_name].add_action_attribute(full_action_name, is_client)
-
-    def update_edges(self, topic_edges, service_edges, action_edges):
-        self._topic_edges = topic_edges
-        self._service_edges = service_edges
-        self._action_edges = action_edges
+    def update_nodes(self, new_nodes):
+        networkx_node_graph = networkx.MultiGraph()
+        self._graph_nodes_list = new_nodes
 
         if not self._live_updates:
             return
 
-        self._has_hidden_nodes = False
-        networkx_node_graph = networkx.MultiGraph()
-        added_node = False
-        nodes_to_remove = dict(self._nodes)
+        added_item = False
+        items_to_remove = dict(self._scene_items)
         conns_to_remove = dict(self._connections)
-        for e in self._topic_edges:
-            (from_node, to_node) = self.apply_node_options(e.from_node, e.to_node)
 
-            if from_node is None and to_node is None:
+        for node in self._graph_nodes_list:
+            should_remove = False
+            if node.name.startswith('/_'):
+                self._has_hidden_nodes = True
+                if not self._show_hidden_nodes:
+                    should_remove = True
+
+            if not self._show_rqt_network_node:
+                if node.name == '/rqt_network':
+                    should_remove = True
+
+            if should_remove:
                 continue
 
-            networkx_node_graph.add_edges_from([(from_node, to_node)])
+            if node.name not in self._scene_items:
+                self._scene_items[node.name] = NodeBox(node.name,
+                                                       node.is_lifecycle,
+                                                       node.is_component_manager)
+                self.addItem(self._scene_items[node.name])
+                added_item = True
 
-            full_topic_name = e.connection_name + ': ' + e.connection_type
-            visible_topic = self._show_hidden_topics or \
-                not topic_is_hidden(e.connection_name, e.connection_type)
+            if node.name in items_to_remove:
+                del items_to_remove[node.name]
+            networkx_node_graph.add_node(node.name)
 
-            if from_node is not None:
-                added_node = self.add_node(from_node) or added_node
-                self.add_topic(from_node, full_topic_name, True, visible_topic)
-                if from_node in nodes_to_remove:
-                    del nodes_to_remove[from_node]
+            for topic in node.topic_publishers + node.topic_subscribers:
+                if not self._show_hidden_topics and \
+                       topic_is_hidden(topic.conn_name, topic.conn_type):
+                    if topic.conn_name in self._scene_items:
+                        self.removeItem(self._scene_items[topic.conn_name])
+                        del self._scene_items[topic.conn_name]
+                    continue
 
-            if to_node is not None:
-                added_node = self.add_node(to_node) or added_node
-                self.add_topic(to_node, full_topic_name, False, visible_topic)
-                if to_node in nodes_to_remove:
-                    del nodes_to_remove[to_node]
+                if topic.conn_name not in self._scene_items:
+                    added_item = True
+                    new_box = ConnectionBox(topic.conn_name, topic.conn_type, [25, 130, 255, 255])
+                    self._scene_items[topic.conn_name] = new_box
+                    self.addItem(self._scene_items[topic.conn_name])
 
-            if visible_topic:
-                if from_node is not None and to_node is not None:
-                    conn_tuple = (from_node, full_topic_name, to_node)
-                    if conn_tuple not in self._connections:
-                        self._connections[conn_tuple] = ConnectionItem()
-                        self.addItem(self._connections[conn_tuple])
-                    if conn_tuple in conns_to_remove:
-                        del conns_to_remove[conn_tuple]
+                if topic.conn_name in items_to_remove:
+                    del items_to_remove[topic.conn_name]
 
-        for e in self._service_edges:
-            (from_node, to_node) = self.apply_node_options(e.from_node, e.to_node)
-
-            if from_node is None and to_node is None:
-                continue
-
-            networkx_node_graph.add_edges_from([(from_node, to_node)])
-
-            full_service_name = e.connection_name + ': ' + e.connection_type
-            visible_service = self._show_hidden_services or \
-                not service_is_hidden(e.connection_name, e.connection_type)
-
-            if from_node is not None:
-                added_node = self.add_node(from_node) or added_node
-                self.add_service(from_node, full_service_name, True, visible_service)
-                if from_node in nodes_to_remove:
-                    del nodes_to_remove[from_node]
-
-            if to_node is not None:
-                added_node = self.add_node(to_node) or added_node
-                self.add_service(to_node, full_service_name, False, visible_service)
-                if to_node in nodes_to_remove:
-                    del nodes_to_remove[to_node]
-
-            if visible_service:
-                if from_node is not None and to_node is not None:
-                    conn_tuple = (from_node, full_service_name, to_node)
-                    if conn_tuple not in self._connections:
-                        self._connections[conn_tuple] = ConnectionItem()
-                        self.addItem(self._connections[conn_tuple])
-                    if conn_tuple in conns_to_remove:
-                        del conns_to_remove[conn_tuple]
-
-        for e in self._action_edges:
-            (from_node, to_node) = self.apply_node_options(e.from_node, e.to_node)
-
-            if from_node is None and to_node is None:
-                continue
-
-            networkx_node_graph.add_edges_from([(from_node, to_node)])
-
-            full_action_name = e.connection_name + ': ' + e.connection_type
-
-            if from_node is not None:
-                added_node = self.add_node(from_node) or added_node
-                self.add_action(from_node, full_action_name, True)
-                if from_node in nodes_to_remove:
-                    del nodes_to_remove[from_node]
-
-            if to_node is not None:
-                added_node = self.add_node(to_node) or added_node
-                self.add_action(to_node, full_action_name, False)
-                if to_node in nodes_to_remove:
-                    del nodes_to_remove[to_node]
-
-            if from_node is not None and to_node is not None:
-                conn_tuple = (from_node, full_action_name, to_node)
+                networkx_node_graph.add_edges_from([(node.name, topic.conn_name)])
+                conn_tuple = (node.name, topic.conn_name)
                 if conn_tuple not in self._connections:
-                    self._connections[conn_tuple] = ConnectionItem()
+                    added_item = True
+                    self._connections[conn_tuple] = ConnectionLine()
                     self.addItem(self._connections[conn_tuple])
                 if conn_tuple in conns_to_remove:
                     del conns_to_remove[conn_tuple]
 
-        for name, item in nodes_to_remove.items():
-            self.removeItem(self._nodes[name])
-            del self._nodes[name]
+            for service in node.service_clients + node.service_servers:
+                if not self._show_hidden_services and \
+                       service_is_hidden(service.conn_name, service.conn_type):
+                    if service.conn_name in self._scene_items:
+                        self.removeItem(self._scene_items[service.conn_name])
+                        del self._scene_items[service.conn_name]
+                    continue
+
+                if service.conn_name not in self._scene_items:
+                    added_item = True
+                    new_box = ConnectionBox(service.conn_name, service.conn_type, [250, 25, 130, 255])
+                    self._scene_items[service.conn_name] = new_box
+                    self.addItem(self._scene_items[service.conn_name])
+
+                if service.conn_name in items_to_remove:
+                    del items_to_remove[service.conn_name]
+
+                networkx_node_graph.add_edges_from([(node.name, service.conn_name)])
+                conn_tuple = (node.name, service.conn_name)
+                if conn_tuple not in self._connections:
+                    added_item = True
+                    self._connections[conn_tuple] = ConnectionLine()
+                    self.addItem(self._connections[conn_tuple])
+                if conn_tuple in conns_to_remove:
+                    del conns_to_remove[conn_tuple]
+
+            for action in node.action_clients + node.action_servers:
+                if action.conn_name not in self._scene_items:
+                    added_item = True
+                    new_box = ConnectionBox(action.conn_name, action.conn_type, [255, 155, 0, 255])
+                    self._scene_items[action.conn_name] = new_box
+                    self.addItem(self._scene_items[action.conn_name])
+                    self._scene_items[action.conn_name].setPos(1100, 900)
+
+                if action.conn_name in items_to_remove:
+                    del items_to_remove[action.conn_name]
+
+                networkx_node_graph.add_edges_from([(node.name, action.conn_name)])
+                conn_tuple = (node.name, action.conn_name)
+                if conn_tuple not in self._connections:
+                    added_item = True
+                    self._connections[conn_tuple] = ConnectionLine()
+                    self.addItem(self._connections[conn_tuple])
+                if conn_tuple in conns_to_remove:
+                    del conns_to_remove[conn_tuple]
+
+        for name, item in items_to_remove.items():
+            if name in self._scene_items:
+                self.removeItem(self._scene_items[name])
+                del self._scene_items[name]
+
+        # TODO(clalancette): These hard-coded values aren't very good
+        pos = networkx.spring_layout(networkx_node_graph,
+                                     center=(999.0, 999.0),
+                                     scale=300.0,
+                                     k=300.0)
 
         for conn_tuple, item in conns_to_remove.items():
             self.removeItem(self._connections[conn_tuple])
             del self._connections[conn_tuple]
 
-        if added_node or nodes_to_remove:
-            # TODO(clalancette): These hard-coded values aren't very good
-            pos = networkx.spring_layout(networkx_node_graph,
-                                         center=(999.0, 999.0),
-                                         scale=300.0,
-                                         k=300.0)
-
-            for name, item in self._nodes.items():
-                self._animations_waiting.add(name)
-                item.set_position(pos[name][0], pos[name][1])
+        if added_item or items_to_remove:
+            for name, item in self._scene_items.items():
+                if name in pos:
+                    self._animations_waiting.add(name)
+                    item.set_position(pos[name][0], pos[name][1])
 
         if not self._animations_waiting:
             self.update_connections()
@@ -804,31 +559,22 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         self.update()
 
     def update_connections(self):
-        for (from_node, connection_name, to_node), item in self._connections.items():
-            source_attr = self._nodes[from_node].get_topic_attribute(connection_name)
-            target_attr = self._nodes[to_node].get_topic_attribute(connection_name)
-            if source_attr is not None and target_attr is not None:
-                if source_attr.get_has_publisher() and target_attr.get_has_subscriber():
-                    item.update_path(source_attr.center(True), target_attr.center(False))
-                continue
-
-            source_attr = self._nodes[from_node].get_service_attribute(connection_name)
-            target_attr = self._nodes[to_node].get_service_attribute(connection_name)
-            if source_attr is not None and target_attr is not None:
-                if source_attr.get_has_client() and target_attr.get_has_server():
-                    item.update_path(source_attr.center(True), target_attr.center(False))
+        for (from_name, to_name), item in self._connections.items():
+            if from_name in self._scene_items and to_name in self._scene_items:
+                item.update_path(self._scene_items[from_name].right(),
+                                 self._scene_items[to_name].left())
 
     def update_node_params(self, node_name, new_params):
-        if node_name in self._nodes:
-            self._nodes[node_name].update_params(new_params)
+        if node_name in self._scene_items:
+            self._scene_items[node_name].update_params(new_params)
 
     def update_lifecycle_state(self, node_name, new_state):
-        if node_name in self._nodes:
-            self._nodes[node_name].update_lifecycle_state(new_state)
+        if node_name in self._scene_items:
+            self._scene_items[node_name].update_lifecycle_state(new_state)
 
     def update_component_manager_nodes(self, node_name, managed_nodes):
-        if node_name in self._nodes:
-            self._nodes[node_name].update_managed_nodes(managed_nodes)
+        if node_name in self._scene_items:
+            self._scene_items[node_name].update_managed_nodes(managed_nodes)
 
     def complete_animation(self, name):
         if name in self._animations_waiting:
@@ -844,12 +590,11 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
         # Hold onto a reference to the ROS 2 network
         self._ros_network = ros_network
-        self._topic_edges = []
-        self._service_edges = []
-        self._action_edges = []
         self._node_parameters = {}
         self._lifecycle_states = {}
         self._component_manager_nodes = {}
+
+        self._node_list = []
 
         # Setup Qt
         self.setRenderHint(QtGui.QPainter.Antialiasing, True)
@@ -931,9 +676,6 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def update_parameters(self, node_name):
-        if node_name is None:
-            return
-
         if node_name not in self._node_parameters:
             self._node_parameters[node_name] = {}
 
@@ -962,32 +704,18 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def get_new_edges(self):
         start = time.time()
-        (topic_edges, service_edges, action_edges, node_to_lifecycle,
-         node_to_component_manager) = self._ros_network.get_edges()
-        if topic_edges != self._topic_edges or \
-           service_edges != self._service_edges or \
-           action_edges != self._action_edges:
-            self._topic_edges = topic_edges
-            self._service_edges = service_edges
-            self._action_edges = action_edges
-            self.scene().newGraph.emit(self._topic_edges, self._service_edges, self._action_edges)
+        node_list = self._ros_network.get_nodes()
 
-        for edge in topic_edges:
-            self.update_parameters(edge.from_node)
-            self.update_parameters(edge.to_node)
+        if node_list != self._node_list:
+            self._node_list = node_list
+            self.scene().newNodes.emit(self._node_list)
 
-        for edge in service_edges:
-            if edge.from_node is not None:
-                if node_to_lifecycle[edge.from_node]:
-                    self.update_lifecycle_state(edge.from_node)
-                if node_to_component_manager[edge.from_node]:
-                    self.update_component_manager_nodes(edge.from_node)
-
-            if edge.to_node is not None:
-                if node_to_lifecycle[edge.to_node]:
-                    self.update_lifecycle_state(edge.to_node)
-                if node_to_component_manager[edge.to_node]:
-                    self.update_component_manager_nodes(edge.to_node)
+        for node in self._node_list:
+            self.update_parameters(node.name)
+            if node.is_lifecycle:
+                self.update_lifecycle_state(node.name)
+            if node.is_component_manager:
+                self.update_component_manager_nodes(node.name)
 
         end = time.time()
         print('Timer took %f seconds' % (end - start))
@@ -995,9 +723,6 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
     # PyQt method override
     def closeEvent(self, *args, **kwargs):
         self._ros_network.shutdown()
-
-# TODO(clalancette): Consider a box for topics, like in rqt_graph.  This may
-# reduce the number of lines on the graph with many publishers and subscribers
 
 # TODO(clalancette): Allow the user to click to hide certain connections
 
@@ -1008,8 +733,6 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 # TODO(clalancette): Show QoS parameters for topics
 
 # TODO(clalancette): Allow the user to select just groups of nodes to concentrate on
-
-# TODO(clalancette): Show nodes that have no topics
 
 
 def main():

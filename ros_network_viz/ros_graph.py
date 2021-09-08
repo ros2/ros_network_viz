@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import bisect
 import threading
 import time
 
@@ -116,38 +117,73 @@ def get_ros_parameter_value(parameter_value):
     return value
 
 
-class ROSNodeEdge:
+class ROSConnection:
 
-    __slots__ = ('from_node', 'to_node', 'connection_name', 'connection_type')
-
-    def __init__(self, from_node, to_node, connection_name, connection_type):
-        self.from_node = from_node
-        self.to_node = to_node
-        self.connection_name = connection_name
-        self.connection_type = connection_type
+    def __init__(self, conn_name, conn_type):
+        self.conn_name = conn_name
+        self.conn_type = conn_type
 
     def __eq__(self, other):
-        return self.from_node == other.from_node and \
-            self.to_node == other.to_node and \
-            self.connection_name == other.connection_name and \
-            self.connection_type == other.connection_type
+        return self.conn_name == other.conn_name and self.conn_type == other.conn_type
 
     def __lt__(self, other):
-        # We don't really care what the order of the nodes in when we
-        # sort, we just care that it is stable.
-        return self.from_node < other.from_node and \
-            self.to_node < other.to_node and \
-            self.connection_name < other.connection_name and \
-            self.connection_type < other.connection_type
+        return self.conn_name < other.conn_name
 
-    def __repr__(self):
-        from_print = self.from_node
-        if from_print is None:
-            from_print = '(nil)'
-        to_print = self.to_node
-        if to_print is None:
-            to_print = '(nil)'
-        return from_print + ' --' + self.connection_name + '--> ' + to_print
+
+class ROSNode:
+
+    __slots__ = ('name', 'is_lifecycle', 'is_component_manager', 'topic_publishers',
+                 'service_clients', 'action_clients', 'topic_subscribers', 'service_servers',
+                 'action_servers')
+
+    def __init__(self, name):
+        self.name = name
+        self.is_lifecycle = False
+        self.is_component_manager = False
+
+        self.topic_publishers = []
+        self.service_clients = []
+        self.action_clients = []
+
+        self.topic_subscribers = []
+        self.service_servers = []
+        self.action_servers = []
+
+    def __eq__(self, other):
+        return self.name == other.name and \
+            self.topic_publishers == other.topic_publishers and \
+            self.service_clients == other.service_clients and \
+            self.action_clients == other.action_clients and \
+            self.topic_subscribers == other.topic_subscribers and \
+            self.service_servers == other.service_servers and \
+            self.action_servers == other.action_servers
+
+    def __lt__(self, other):
+        return self.name < other.name
+
+    def set_lifecycle(self, is_lifecycle):
+        self.is_lifecycle = is_lifecycle
+
+    def set_component_manager(self, is_component_manager):
+        self.is_component_manager = is_component_manager
+
+    def add_topic_publisher(self, topic_name, topic_type):
+        bisect.insort_left(self.topic_publishers, ROSConnection(topic_name, topic_type))
+
+    def add_service_client(self, service_name, service_type):
+        bisect.insort_left(self.service_clients, ROSConnection(service_name, service_type))
+
+    def add_action_client(self, action_name, action_type):
+        bisect.insort_left(self.action_clients, ROSConnection(action_name, action_type))
+
+    def add_topic_subscriber(self, topic_name, topic_type):
+        bisect.insort_left(self.topic_subscribers, ROSConnection(topic_name, topic_type))
+
+    def add_service_server(self, service_name, service_type):
+        bisect.insort_left(self.service_servers, ROSConnection(service_name, service_type))
+
+    def add_action_server(self, action_name, action_type):
+        bisect.insort_left(self.action_servers, ROSConnection(action_name, action_type))
 
 
 class ROSAsyncServiceStateMachine:
@@ -392,170 +428,73 @@ class ROSGraph:
         self._spin_thread = threading.Thread(target=self._executor.spin)
         self._spin_thread.start()
 
-    def _get_topic_edges(self, name, namespace):
-        edges = []
-
-        node_full_name = create_node_namespace(name, namespace)
-
-        pubs = self._node.get_publisher_names_and_types_by_node(name, namespace)
-        for topic_name, topic_types in pubs:
-            had_subscriber = False
-            for topic_info in self._node.get_subscriptions_info_by_topic(topic_name):
-                sub_node_full_name = create_node_namespace(topic_info.node_name,
-                                                           topic_info.node_namespace)
-                e = ROSNodeEdge(node_full_name,
-                                sub_node_full_name,
-                                topic_name,
-                                topic_info.topic_type)
-                if node_full_name != sub_node_full_name and e not in edges:
-                    edges.append(e)
-                    had_subscriber = True
-
-            if not had_subscriber:
-                for topic_type in topic_types:
-                    edges.append(ROSNodeEdge(node_full_name, None, topic_name, topic_type))
-
-        subs = self._node.get_subscriber_names_and_types_by_node(name, namespace)
-        for topic_name, topic_types in subs:
-            had_publisher = False
-            for topic_info in self._node.get_publishers_info_by_topic(topic_name):
-                pub_node_full_name = create_node_namespace(topic_info.node_name,
-                                                           topic_info.node_namespace)
-                e = ROSNodeEdge(pub_node_full_name,
-                                node_full_name, topic_name,
-                                topic_info.topic_type)
-                if node_full_name != pub_node_full_name and e not in edges:
-                    edges.append(e)
-                    had_publisher = True
-
-            if not had_publisher:
-                for topic_type in topic_types:
-                    edges.append(ROSNodeEdge(None, node_full_name, topic_name, topic_type))
-
-        return edges
-
-    def _get_service_edges(self, name, namespace, node_to_lifecycle, node_to_component_manager):
-        edges = []
-
-        node_full_name = create_node_namespace(name, namespace)
-
-        if node_full_name not in node_to_lifecycle:
-            node_to_lifecycle[node_full_name] = False
-
-        if node_full_name not in node_to_component_manager:
-            node_to_component_manager[node_full_name] = False
-
-        servers = self._node.get_service_names_and_types_by_node(name, namespace)
-        for service_name, service_types in servers:
-            for service_type in service_types:
-                edges.append(ROSNodeEdge(None, node_full_name, service_name, service_type))
-                if 'get_state' in service_name and service_type == 'lifecycle_msgs/srv/GetState':
-                    node_to_lifecycle[node_full_name] = True
-
-                if 'list_nodes' in service_name and \
-                   service_type == 'composition_interfaces/srv/ListNodes':
-                    node_to_component_manager[node_full_name] = True
-
-        return edges
-
-    def _get_action_edges(self, name, namespace):
-        edges = []
-
-        node_full_name = create_node_namespace(name, namespace)
-
-        actions = rclpy.action.get_action_server_names_and_types_by_node(self._node,
-                                                                         name,
-                                                                         namespace)
-        for action_name, action_types in actions:
-            for action_type in action_types:
-                edges.append(ROSNodeEdge(None, node_full_name, action_name, action_type))
-
-        return edges
-
-    def get_edges(self):
-        topic_edges = []
-        service_edges = []
-        action_edges = []
-        node_to_lifecycle = {}
-        node_to_component_manager = {}
+    def get_nodes(self):
+        nodes = []
 
         # If we ever see that the shutting_down_lock is locked, we know that
         # the program is going down.  Don't do any work in that case.
         if not self._shutting_down_lock.acquire(blocking=False):
-            return (topic_edges,
-                    service_edges,
-                    action_edges,
-                    node_to_lifecycle,
-                    node_to_component_manager)
+            return nodes
 
         for name, namespace in self._node.get_node_names_and_namespaces():
-            try:
-                topic_edges.extend(self._get_topic_edges(name, namespace))
-
-                service_edges.extend(self._get_service_edges(name,
-                                                             namespace,
-                                                             node_to_lifecycle,
-                                                             node_to_component_manager))
-
-                action_edges.extend(self._get_action_edges(name, namespace))
-
-            except rclpy.node.NodeNameNonExistentError:
-                # It's possible that the node exited between when we saw it
-                # in get_node_names_and_namespaces() and now.  If that happens,
-                # just skip the processing.
-                pass
-
-        for name, namespace in self._node.get_node_names_and_namespaces():
-            node_full_name = create_node_namespace(name, namespace)
+            fully_qualified_name = create_node_namespace(name, namespace)
+            rosnode = ROSNode(fully_qualified_name)
 
             try:
+                for topic_name, topic_types in \
+                        self._node.get_publisher_names_and_types_by_node(name, namespace):
+                    for topic_type in topic_types:
+                        rosnode.add_topic_publisher(topic_name, topic_type)
+
                 for service_name, service_types in \
-                  self._node.get_client_names_and_types_by_node(name, namespace):
+                        self._node.get_client_names_and_types_by_node(name, namespace):
                     for service_type in service_types:
-                        client_had_server = False
-                        for e in service_edges:
-                            if service_name == e.connection_name and \
-                               service_type == e.connection_type:
-                                e.from_node = node_full_name
-                                client_had_server = True
+                        rosnode.add_service_client(service_name, service_type)
 
-                        if not client_had_server:
-                            service_edges.append(ROSNodeEdge(node_full_name,
-                                                             None,
-                                                             service_name,
-                                                             service_type))
-
-                for action_name, action_types in \
-                    rclpy.action.get_action_client_names_and_types_by_node(self._node,
-                                                                           name,
-                                                                           namespace):
+                action_clients = rclpy.action.get_action_client_names_and_types_by_node(
+                    self._node, name, namespace)
+                for action_name, action_types in action_clients:
                     for action_type in action_types:
-                        action_client_had_server = False
-                        for e in action_edges:
-                            if action_name == e.connection_name and \
-                               action_type == e.connection_type:
-                                e.from_node = node_full_name
-                                action_client_had_server = True
+                        rosnode.add_action_client(action_name, action_type)
 
-                        if not action_client_had_server:
-                            action_edges.append(ROSNodeEdge(node_full_name,
-                                                            None,
-                                                            action_name,
-                                                            action_type))
+                for topic_name, topic_types in \
+                        self._node.get_subscriber_names_and_types_by_node(name, namespace):
+                    for topic_type in topic_types:
+                        rosnode.add_topic_subscriber(topic_name, topic_type)
+
+                for service_name, service_types in \
+                        self._node.get_service_names_and_types_by_node(name, namespace):
+                    for service_type in service_types:
+                        rosnode.add_service_server(service_name, service_type)
+                        if 'get_state' in service_name and \
+                           service_type == 'lifecycle_msgs/srv/GetState':
+                            rosnode.set_lifecycle(True)
+
+                        if 'list_nodes' in service_name and \
+                           service_type == 'composition_interfaces/srv/ListNodes':
+                            rosnode.set_component_manager(True)
+
+                action_servers = rclpy.action.get_action_server_names_and_types_by_node(
+                    self._node, name, namespace)
+                for action_name, action_types in action_servers:
+                    for action_type in action_types:
+                        rosnode.add_action_server(action_name, action_type)
 
             except rclpy.node.NodeNameNonExistentError:
                 # It's possible that the node exited between when we saw it
                 # in get_node_names_and_namespaces() and now.  If that happens,
                 # just skip the processing.
-                pass
+                continue
+
+            # TODO(clalancette): To be robust, we really should deal with other
+            # errors from the rclpy API (like RCLError), not crash, and report
+            # them somehow to the user
+
+            bisect.insort_left(nodes, rosnode)
 
         self._shutting_down_lock.release()
 
-        return (topic_edges,
-                service_edges,
-                action_edges,
-                node_to_lifecycle,
-                node_to_component_manager)
+        return nodes
 
     def parameter_event_cb(self, msg):
         # If we ever see that the shutting_down_lock is locked, we know that

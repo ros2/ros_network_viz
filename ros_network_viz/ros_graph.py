@@ -175,6 +175,9 @@ class ROSAsyncServiceStateMachine:
 
     def step(self):
         if self._state == self.NEEDS_CLIENT:
+            # TODO(clalancette): If we never make it to HAS_INITIAL_RESPONSE,
+            # or we are doing periodic refresh, then we are never destroying
+            # this client.
             self._client = self._rosnode.create_client(self._rostype,
                                                        f'{self._node_name}/{self._service_name}')
             self._state = self.NEEDS_CLIENT_READY
@@ -218,6 +221,9 @@ class ROSAsyncServiceStateMachine:
     def has_initial_response(self):
         return self._state == self.HAS_INITIAL_RESPONSE
 
+    def reset(self):
+        self._state = self.NEEDS_CLIENT
+
 
 class ROSParameterStateMachine:
 
@@ -249,19 +255,31 @@ class ROSParameterStateMachine:
 
     def step(self):
         list_param_response = self._list_state_machine.step()
-        if self._list_state_machine.has_initial_response() and list_param_response:
-            self._param_names = list_param_response.result.names
+        if not self._list_state_machine.has_initial_response() or not list_param_response:
+            return self._parameters
 
-            get_params_response = self._get_state_machine.step()
-            if self._get_state_machine.has_initial_response() and get_params_response:
-                self._parameters_lock.acquire()
-                # TODO(clalancette): what happens if the get_params_response is
-                # shorter than the parameter names?
-                for i, name in enumerate(list_param_response.result.names):
-                    if name not in self._parameters:
-                        val = get_ros_parameter_value(get_params_response.values[i])
-                        self._parameters[name] = val
-                self._parameters_lock.release()
+        self._param_names = list_param_response.result.names
+
+        get_params_response = self._get_state_machine.step()
+        if not self._get_state_machine.has_initial_response() or not get_params_response:
+            return self._parameters
+
+        # If the list of parameter names is a different length from the
+        # get_parameters response, then probably the parameters changed between
+        # the two calls.  Reset and try again.
+        if len(self._param_names) != len(get_params_response.values):
+            self._list_state_machine.reset()
+            return self._parameters
+
+        self._parameters_lock.acquire()
+        for i, name in enumerate(self._param_names):
+            if name not in self._parameters:
+                val = get_ros_parameter_value(get_params_response.values[i])
+                self._parameters[name] = val
+            else:
+                if self._parameters[name] is None:
+                    del self._parameters[name]
+        self._parameters_lock.release()
 
         return self._parameters
 
@@ -272,7 +290,16 @@ class ROSParameterStateMachine:
         for param in msg.changed_parameters:
             self._parameters[param.name] = get_ros_parameter_value(param.value)
         for param in msg.deleted_parameters:
-            del self._parameters[param.name]
+            if param.name in self._parameters:
+                del self._parameters[param.name]
+            else:
+                # If we get here and the parameter name is not in
+                # self._parameters, then this callback may have happened before
+                # we got the initial response from the 'get_parameters' service
+                # call.  In that case, actually *add* the parameter to the dict
+                # as "None", and then the 'get_parameters' machinery should
+                # eventually remove it.
+                self._parameters[param.name] = None
         self._parameters_lock.release()
 
 

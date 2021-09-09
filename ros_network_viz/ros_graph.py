@@ -360,10 +360,11 @@ class ROSGraph:
         self._executor = rclpy.executors.SingleThreadedExecutor()
         self._executor.add_node(self._node)
 
+        self._shutting_down_lock = threading.Lock()
         self._spin_thread = threading.Thread(target=self._executor.spin)
         self._spin_thread.start()
 
-    def get_topic_edges(self, name, namespace):
+    def _get_topic_edges(self, name, namespace):
         edges = []
 
         node_full_name = create_node_namespace(name, namespace)
@@ -405,7 +406,7 @@ class ROSGraph:
 
         return edges
 
-    def get_service_edges(self, name, namespace, node_to_lifecycle, node_to_component_manager):
+    def _get_service_edges(self, name, namespace, node_to_lifecycle, node_to_component_manager):
         edges = []
 
         node_full_name = create_node_namespace(name, namespace)
@@ -429,7 +430,7 @@ class ROSGraph:
 
         return edges
 
-    def get_action_edges(self, name, namespace):
+    def _get_action_edges(self, name, namespace):
         edges = []
 
         node_full_name = create_node_namespace(name, namespace)
@@ -450,16 +451,21 @@ class ROSGraph:
         node_to_lifecycle = {}
         node_to_component_manager = {}
 
+        # If we ever see that the shutting_down_lock is locked, we know that
+        # the program is going down.  Don't do any work in that case.
+        if not self._shutting_down_lock.acquire(blocking=False):
+            return (topic_edges, service_edges, action_edges, node_to_lifecycle, node_to_component_manager)
+
         for name, namespace in self._node.get_node_names_and_namespaces():
             try:
-                topic_edges.extend(self.get_topic_edges(name, namespace))
+                topic_edges.extend(self._get_topic_edges(name, namespace))
 
-                service_edges.extend(self.get_service_edges(name,
+                service_edges.extend(self._get_service_edges(name,
                                                             namespace,
                                                             node_to_lifecycle,
                                                             node_to_component_manager))
 
-                action_edges.extend(self.get_action_edges(name, namespace))
+                action_edges.extend(self._get_action_edges(name, namespace))
 
             except rclpy.node.NodeNameNonExistentError:
                 # It's possible that the node exited between when we saw it
@@ -511,6 +517,8 @@ class ROSGraph:
                 # just skip the processing.
                 pass
 
+        self._shutting_down_lock.release()
+
         return (topic_edges,
                 service_edges,
                 action_edges,
@@ -518,8 +526,15 @@ class ROSGraph:
                 node_to_component_manager)
 
     def parameter_event_cb(self, msg):
+        # If we ever see that the shutting_down_lock is locked, we know that
+        # the program is going down.  Don't do any work in that case.
+        if not self._shutting_down_lock.acquire(blocking=False):
+            return
+
         if msg.node in self._param_clients:
             self._param_clients[msg.node].update_parameters_from_msg(msg)
+
+        self._shutting_down_lock.release()
 
     def get_node_parameters(self, node_name):
         # This method is useful to get all of the parameters and values from a
@@ -527,10 +542,17 @@ class ROSGraph:
         # any part of the pipeline isn't ready, this will return an empty
         # dictionary.  Subsequent calls may then get the data.
 
+        if not self._shutting_down_lock.acquire(blocking=False):
+            return
+
         if node_name not in self._param_clients:
             self._param_clients[node_name] = ROSParameterStateMachine(self._node, node_name)
 
-        return self._param_clients[node_name].step()
+        ret = self._param_clients[node_name].step()
+
+        self._shutting_down_lock.release()
+
+        return ret
 
     def get_lifecycle_node_state(self, node_name):
         # This method is useful to get the lifecycle state of a Lifecycle node.
@@ -540,10 +562,17 @@ class ROSGraph:
         # entirely non-blocking, which means that if any part of the pipeline
         # isn't ready, this will return None.  Subsequent calls may get the data.
 
+        if not self._shutting_down_lock.acquire(blocking=False):
+            return
+
         if node_name not in self._lc_state_clients:
             self._lc_state_clients[node_name] = ROSLifecycleStateMachine(self._node, node_name)
 
-        return self._lc_state_clients[node_name].step()
+        ret = self._lc_state_clients[node_name].step()
+
+        self._shutting_down_lock.release()
+
+        return ret
 
     def get_component_manager_nodes(self, node_name):
         # This method is useful to get the nodes that are part of a Component
@@ -554,16 +583,25 @@ class ROSGraph:
         # if any part of the pipeline isn't ready, this will return None.
         # Subsequent calls may get the data.
 
+        if not self._shutting_down_lock.acquire(blocking=False):
+            return
+
         if node_name not in self._component_manager_nodes_clients:
             cm = ROSComponentManagerListNodesStateMachine(self._node, node_name)
             self._component_manager_nodes_clients[node_name] = cm
 
-        return self._component_manager_nodes_clients[node_name].step()
+        ret = self._component_manager_nodes_clients[node_name].step()
+
+        self._shutting_down_lock.release()
+
+        return ret
 
     def shutdown(self):
+        self._shutting_down_lock.acquire()
         self._node.destroy_subscription(self._param_events_sub)
-        # TODO(clalancette): We really should call destroy_node() here, but it
-        # can race with calls to get_{topic,service}_edges()
-        # self._node.destroy_node()
+        self._node.destroy_node()
         self._executor.shutdown()
         self._spin_thread.join()
+        # Note that we never release the lock; this is on purpose!  It's how
+        # we signal to the other methods here that we are shutting down and they
+        # should not attempt further work.

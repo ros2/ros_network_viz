@@ -352,10 +352,11 @@ class ROSGraph:
                                                                 self.parameter_event_cb,
                                                                 10)
 
-        self._param_clients = {}
+        self._param_state_machines = {}
 
-        self._lc_state_clients = {}
-        self._component_manager_nodes_clients = {}
+        self._lc_state_state_machines = {}
+
+        self._cm_nodes_state_machines = {}
 
         self._executor = rclpy.executors.SingleThreadedExecutor()
         self._executor.add_node(self._node)
@@ -531,8 +532,8 @@ class ROSGraph:
         if not self._shutting_down_lock.acquire(blocking=False):
             return
 
-        if msg.node in self._param_clients:
-            self._param_clients[msg.node].update_parameters_from_msg(msg)
+        if msg.node in self._param_state_machines:
+            self._param_state_machines[msg.node].update_parameters_from_msg(msg)
 
         self._shutting_down_lock.release()
 
@@ -545,10 +546,10 @@ class ROSGraph:
         if not self._shutting_down_lock.acquire(blocking=False):
             return
 
-        if node_name not in self._param_clients:
-            self._param_clients[node_name] = ROSParameterStateMachine(self._node, node_name)
+        if node_name not in self._param_state_machines:
+            self._param_state_machines[node_name] = ROSParameterStateMachine(self._node, node_name)
 
-        ret = self._param_clients[node_name].step()
+        ret = self._param_state_machines[node_name].step()
 
         self._shutting_down_lock.release()
 
@@ -565,10 +566,11 @@ class ROSGraph:
         if not self._shutting_down_lock.acquire(blocking=False):
             return
 
-        if node_name not in self._lc_state_clients:
-            self._lc_state_clients[node_name] = ROSLifecycleStateMachine(self._node, node_name)
+        if node_name not in self._lc_state_state_machines:
+            self._lc_state_state_machines[node_name] = ROSLifecycleStateMachine(self._node,
+                                                                                node_name)
 
-        ret = self._lc_state_clients[node_name].step()
+        ret = self._lc_state_state_machines[node_name].step()
 
         self._shutting_down_lock.release()
 
@@ -586,11 +588,11 @@ class ROSGraph:
         if not self._shutting_down_lock.acquire(blocking=False):
             return
 
-        if node_name not in self._component_manager_nodes_clients:
+        if node_name not in self._cm_nodes_state_machines:
             cm = ROSComponentManagerListNodesStateMachine(self._node, node_name)
-            self._component_manager_nodes_clients[node_name] = cm
+            self._cm_nodes_state_machines[node_name] = cm
 
-        ret = self._component_manager_nodes_clients[node_name].step()
+        ret = self._cm_nodes_state_machines[node_name].step()
 
         self._shutting_down_lock.release()
 

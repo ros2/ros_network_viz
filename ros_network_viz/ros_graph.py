@@ -482,16 +482,20 @@ class ROSGraph:
         # If we ever see that the shutting_down_lock is locked, we know that
         # the program is going down.  Don't do any work in that case.
         if not self._shutting_down_lock.acquire(blocking=False):
-            return (topic_edges, service_edges, action_edges, node_to_lifecycle, node_to_component_manager)
+            return (topic_edges,
+                    service_edges,
+                    action_edges,
+                    node_to_lifecycle,
+                    node_to_component_manager)
 
         for name, namespace in self._node.get_node_names_and_namespaces():
             try:
                 topic_edges.extend(self._get_topic_edges(name, namespace))
 
                 service_edges.extend(self._get_service_edges(name,
-                                                            namespace,
-                                                            node_to_lifecycle,
-                                                            node_to_component_manager))
+                                                             namespace,
+                                                             node_to_lifecycle,
+                                                             node_to_component_manager))
 
                 action_edges.extend(self._get_action_edges(name, namespace))
 

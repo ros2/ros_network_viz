@@ -22,12 +22,42 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from ros_network_viz.ros_graph import ROSGraph, service_is_hidden, topic_is_hidden
 
+COLOR_PALETTE = {
+    'connection_line': 'f48c06',
+    'connection_line_highlight': 'ffba08',
+    'lifecycle_node': '0a9396',
+    'component_node': '9b2226',
+    'regular_node': '505050',
+    'node_border': '323232',
+    'node_border_highlight': 'ae2012',
+    'node_text': 'e6e6e6',
+    'topic': '005f73',
+    'service': 'bb3e03',
+    'action': 'e9d8a6',
+    'background': '282828',
+    'grid_line': '323232',
+}
 
-def convert_data_to_color(data):
-    # rgb or rgba
-    if len(data) in [3, 4]:
-        return QtGui.QColor(*data)
-    raise Exception('Invalid color, must be list of 3 or 4 items')
+
+def convert_hex_to_color(data):
+    r = None
+    g = None
+    b = None
+
+    if len(data) == 6:
+        r = data[0:2]
+        g = data[2:4]
+        b = data[4:6]
+    elif len(data) == 7:
+        if data[0] == '#':
+            r = data[1:3]
+            g = data[3:5]
+            b = data[5:7]
+
+    if r is not None and g is not None and b is not None:
+        return QtGui.QColor(int(r, 16), int(g, 16), int(b, 16))
+
+    raise Exception('Invalid color, must be a hex listing with the # or not on the front')
 
 
 class ConnectionLine(QtWidgets.QGraphicsPathItem):
@@ -36,10 +66,11 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
         super().__init__()
 
         self.setZValue(-1)
+        self.setAcceptHoverEvents(True)
 
         if qos_profile is not None:
-            text = "Quality of Service:\n"
-            text += '\n'.join([
+            text = '\n'.join([
+                f'Quality of Service:',
                 f'  Reliability: {qos_profile.reliability.name}',
                 f'  Durability: {qos_profile.durability.name}',
                 f'  Lifespan: {qos_profile.lifespan}',
@@ -49,10 +80,25 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
             ])
             self.setToolTip(text)
 
-        self._pen = QtGui.QPen(convert_data_to_color([255, 155, 0, 255]))
-        self._pen.setWidth(2)
+        self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['connection_line']))
+        self._pen.setWidth(3)
+
+        self._pen_sel = QtGui.QPen(
+            convert_hex_to_color(COLOR_PALETTE['connection_line_highlight'])
+        )
+        self._pen_sel.setWidth(5)
 
         self.setPen(self._pen)
+
+    # PyQt method override
+    def hoverEnterEvent(self, event):
+        self.setPen(self._pen_sel)
+        super().hoverEnterEvent(event)
+
+    # PyQt method override
+    def hoverLeaveEvent(self, event):
+        self.setPen(self._pen)
+        super().hoverLeaveEvent(event)
 
     def update_path(self, source_point, target_point):
         path = QtGui.QPainterPath()
@@ -92,25 +138,25 @@ class NodeBox(QtWidgets.QGraphicsObject):
         self._brush.setStyle(QtCore.Qt.SolidPattern)
         # TODO(clalancette): What happens if a node is both lifecycle *and* component manager?
         if self._is_lifecycle:
-            self._brush.setColor(convert_data_to_color([25, 130, 25, 255]))
+            self._brush.setColor(convert_hex_to_color(COLOR_PALETTE['lifecycle_node']))
         elif self._is_component_manager:
-            self._brush.setColor(convert_data_to_color([130, 25, 25, 255]))
+            self._brush.setColor(convert_hex_to_color(COLOR_PALETTE['component_node']))
         else:
-            self._brush.setColor(convert_data_to_color([80, 80, 80, 255]))
+            self._brush.setColor(convert_hex_to_color(COLOR_PALETTE['regular_node']))
 
         self._pen = QtGui.QPen()
         self._pen.setStyle(QtCore.Qt.SolidLine)
         self._pen.setWidth(self._node_border)
-        self._pen.setColor(convert_data_to_color([50, 50, 50, 255]))
+        self._pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_border']))
 
         self._pen_sel = QtGui.QPen()
         self._pen_sel.setStyle(QtCore.Qt.SolidLine)
         self._pen_sel.setWidth(self._node_border)
-        self._pen_sel.setColor(convert_data_to_color([170, 80, 80, 255]))
+        self._pen_sel.setColor(convert_hex_to_color(COLOR_PALETTE['node_border_highlight']))
 
         self._text_pen = QtGui.QPen()
         self._text_pen.setStyle(QtCore.Qt.SolidLine)
-        self._text_pen.setColor(convert_data_to_color([230, 230, 230, 255]))
+        self._text_pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_text']))
 
         self._node_text_font = QtGui.QFont('Arial', 12, QtGui.QFont.Bold)
 
@@ -231,28 +277,28 @@ class ConnectionBox(QtWidgets.QGraphicsObject):
 
         self.setZValue(1)
 
-        self.setToolTip("Type: " + conn_type)
+        self.setToolTip('Type: ' + conn_type)
 
         self.setFlag(QtWidgets.QGraphicsObject.ItemIsMovable)
         self.setFlag(QtWidgets.QGraphicsObject.ItemIsSelectable)
 
         self._brush = QtGui.QBrush()
         self._brush.setStyle(QtCore.Qt.SolidPattern)
-        self._brush.setColor(convert_data_to_color(bg_color))
+        self._brush.setColor(convert_hex_to_color(COLOR_PALETTE[bg_color]))
 
         self._pen = QtGui.QPen()
         self._pen.setStyle(QtCore.Qt.SolidLine)
         self._pen.setWidth(self._node_border)
-        self._pen.setColor(convert_data_to_color([50, 50, 50, 255]))
+        self._pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_border']))
 
         self._pen_sel = QtGui.QPen()
         self._pen_sel.setStyle(QtCore.Qt.SolidLine)
         self._pen_sel.setWidth(self._node_border)
-        self._pen_sel.setColor(convert_data_to_color([170, 80, 80, 255]))
+        self._pen_sel.setColor(convert_hex_to_color(COLOR_PALETTE['node_border_highlight']))
 
         self._text_pen = QtGui.QPen()
         self._text_pen.setStyle(QtCore.Qt.SolidLine)
-        self._text_pen.setColor(convert_data_to_color([230, 230, 230, 255]))
+        self._text_pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_text']))
 
         self._node_text_font = QtGui.QFont('Arial', 10, QtGui.QFont.Normal)
 
@@ -339,10 +385,10 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
         self._brush = QtGui.QBrush()
         self._brush.setStyle(QtCore.Qt.SolidPattern)
-        self._brush.setColor(convert_data_to_color([40, 40, 40, 255]))
+        self._brush.setColor(convert_hex_to_color(COLOR_PALETTE['background']))
 
         self._pen = QtGui.QPen()
-        self._pen.setColor(convert_data_to_color([50, 50, 50, 255]))
+        self._pen.setColor(convert_hex_to_color(COLOR_PALETTE['grid_line']))
         self._pen.setWidth(0)
 
         self._right_click_menu = QtWidgets.QMenu()
@@ -483,7 +529,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
                 if topic.conn_name not in self._scene_items:
                     added_item = True
-                    new_box = ConnectionBox(topic.conn_name, topic.conn_type, [25, 130, 255, 255])
+                    new_box = ConnectionBox(topic.conn_name, topic.conn_type, 'topic')
                     self._scene_items[topic.conn_name] = new_box
                     self.addItem(self._scene_items[topic.conn_name])
 
@@ -503,7 +549,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
                 if service.conn_name not in self._scene_items:
                     added_item = True
-                    new_box = ConnectionBox(service.conn_name, service.conn_type, [250, 25, 130, 255])
+                    new_box = ConnectionBox(service.conn_name, service.conn_type, 'service')
                     self._scene_items[service.conn_name] = new_box
                     self.addItem(self._scene_items[service.conn_name])
 
@@ -516,7 +562,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
             for action in node.action_clients + node.action_servers:
                 if action.conn_name not in self._scene_items:
                     added_item = True
-                    new_box = ConnectionBox(action.conn_name, action.conn_type, [255, 155, 0, 255])
+                    new_box = ConnectionBox(action.conn_name, action.conn_type, 'action')
                     self._scene_items[action.conn_name] = new_box
                     self.addItem(self._scene_items[action.conn_name])
                     self._scene_items[action.conn_name].setPos(1100, 900)

@@ -24,7 +24,7 @@ import rcl_interfaces.srv
 import rclpy
 import rclpy.action
 import rclpy.node
-import rclpy.topic_endpoint_info
+from rclpy.topic_endpoint_info import TopicEndpointTypeEnum
 import rclpy.topic_or_service_is_hidden
 
 IGNORED_TOPICS = (
@@ -127,7 +127,9 @@ class ROSConnection:
         self.qos_profile = qos_profile
 
     def __eq__(self, other):
-        return self.conn_name == other.conn_name and self.conn_type == other.conn_type and self.qos_profile == other.qos_profile
+        return self.conn_name == other.conn_name and \
+            self.conn_type == other.conn_type and \
+            self.qos_profile == other.qos_profile
 
     def __lt__(self, other):
         return self.conn_name < other.conn_name
@@ -174,22 +176,28 @@ class ROSNode:
         self.is_component_manager = is_component_manager
 
     def add_topic_publisher(self, topic_name, topic_type, qos_profile):
-        bisect.insort_left(self.topic_publishers, ROSConnection(topic_name, topic_type, qos_profile))
+        bisect.insort_left(self.topic_publishers,
+                           ROSConnection(topic_name, topic_type, qos_profile))
 
     def add_service_client(self, service_name, service_type):
-        bisect.insort_left(self.service_clients, ROSConnection(service_name, service_type, None))
+        bisect.insort_left(self.service_clients,
+                           ROSConnection(service_name, service_type, None))
 
     def add_action_client(self, action_name, action_type):
-        bisect.insort_left(self.action_clients, ROSConnection(action_name, action_type, None))
+        bisect.insort_left(self.action_clients,
+                           ROSConnection(action_name, action_type, None))
 
     def add_topic_subscriber(self, topic_name, topic_type, qos_profile):
-        bisect.insort_left(self.topic_subscribers, ROSConnection(topic_name, topic_type, qos_profile))
+        bisect.insort_left(self.topic_subscribers,
+                           ROSConnection(topic_name, topic_type, qos_profile))
 
     def add_service_server(self, service_name, service_type):
-        bisect.insort_left(self.service_servers, ROSConnection(service_name, service_type, None))
+        bisect.insort_left(self.service_servers,
+                           ROSConnection(service_name, service_type, None))
 
     def add_action_server(self, action_name, action_type):
-        bisect.insort_left(self.action_servers, ROSConnection(action_name, action_type, None))
+        bisect.insort_left(self.action_servers,
+                           ROSConnection(action_name, action_type, None))
 
 
 class ROSAsyncServiceStateMachine:
@@ -452,8 +460,8 @@ class ROSGraph:
                         self._node.get_publisher_names_and_types_by_node(name, namespace):
 
                     for info in self._node.get_publishers_info_by_topic(topic_name):
-                        if info.endpoint_type != rclpy.topic_endpoint_info.TopicEndpointTypeEnum.PUBLISHER:
-                            # This should never happen, but just do it to be safe
+                        if info.endpoint_type != TopicEndpointTypeEnum.PUBLISHER:
+                            # This should never happen, but just check it to be safe
                             continue
 
                         info_node_name = create_node_namespace(info.node_name, info.node_namespace)
@@ -482,8 +490,8 @@ class ROSGraph:
                 for topic_name, topic_types in \
                         self._node.get_subscriber_names_and_types_by_node(name, namespace):
                     for info in self._node.get_subscriptions_info_by_topic(topic_name):
-                        if info.endpoint_type != rclpy.topic_endpoint_info.TopicEndpointTypeEnum.SUBSCRIPTION:
-                            # This should never happen, but just do it to be safe
+                        if info.endpoint_type != TopicEndpointTypeEnum.SUBSCRIPTION:
+                            # This should never happen, but just check it to be safe
                             continue
 
                         info_node_name = create_node_namespace(info.node_name, info.node_namespace)

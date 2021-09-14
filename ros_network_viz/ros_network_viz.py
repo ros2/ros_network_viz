@@ -32,10 +32,22 @@ def convert_data_to_color(data):
 
 class ConnectionLine(QtWidgets.QGraphicsPathItem):
 
-    def __init__(self):
+    def __init__(self, qos_profile):
         super().__init__()
 
         self.setZValue(-1)
+
+        if qos_profile is not None:
+            text = "Quality of Service:\n"
+            text += '\n'.join([
+                f'  Reliability: {qos_profile.reliability.name}',
+                f'  Durability: {qos_profile.durability.name}',
+                f'  Lifespan: {qos_profile.lifespan}',
+                f'  Deadline: {qos_profile.deadline}',
+                f'  Liveliness: {qos_profile.liveliness.name}',
+                f'  Liveliness lease duration: {qos_profile.liveliness_lease_duration}',
+            ])
+            self.setToolTip(text)
 
         self._pen = QtGui.QPen(convert_data_to_color([255, 155, 0, 255]))
         self._pen.setWidth(2)
@@ -425,15 +437,16 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         self.update_nodes(self._graph_nodes_list)
 
     def update_nodes(self, new_nodes):
-        networkx_node_graph = networkx.MultiGraph()
         self._graph_nodes_list = new_nodes
 
         if not self._live_updates:
             return
 
+        networkx_node_graph = networkx.MultiGraph()
         added_item = False
         items_to_remove = dict(self._scene_items)
         conns_to_remove = dict(self._connections)
+        connection_tuples = []
 
         for node in self._graph_nodes_list:
             should_remove = False
@@ -478,13 +491,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                     del items_to_remove[topic.conn_name]
 
                 networkx_node_graph.add_edges_from([(node.name, topic.conn_name)])
-                conn_tuple = (node.name, topic.conn_name)
-                if conn_tuple not in self._connections:
-                    added_item = True
-                    self._connections[conn_tuple] = ConnectionLine()
-                    self.addItem(self._connections[conn_tuple])
-                if conn_tuple in conns_to_remove:
-                    del conns_to_remove[conn_tuple]
+                connection_tuples.append((node.name, topic))
 
             for service in node.service_clients + node.service_servers:
                 if not self._show_hidden_services and \
@@ -504,13 +511,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                     del items_to_remove[service.conn_name]
 
                 networkx_node_graph.add_edges_from([(node.name, service.conn_name)])
-                conn_tuple = (node.name, service.conn_name)
-                if conn_tuple not in self._connections:
-                    added_item = True
-                    self._connections[conn_tuple] = ConnectionLine()
-                    self.addItem(self._connections[conn_tuple])
-                if conn_tuple in conns_to_remove:
-                    del conns_to_remove[conn_tuple]
+                connection_tuples.append((node.name, service))
 
             for action in node.action_clients + node.action_servers:
                 if action.conn_name not in self._scene_items:
@@ -524,30 +525,32 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                     del items_to_remove[action.conn_name]
 
                 networkx_node_graph.add_edges_from([(node.name, action.conn_name)])
-                conn_tuple = (node.name, action.conn_name)
-                if conn_tuple not in self._connections:
-                    added_item = True
-                    self._connections[conn_tuple] = ConnectionLine()
-                    self.addItem(self._connections[conn_tuple])
-                if conn_tuple in conns_to_remove:
-                    del conns_to_remove[conn_tuple]
+                connection_tuples.append((node.name, action))
 
         for name, item in items_to_remove.items():
             if name in self._scene_items:
                 self.removeItem(self._scene_items[name])
                 del self._scene_items[name]
 
-        # TODO(clalancette): These hard-coded values aren't very good
-        pos = networkx.spring_layout(networkx_node_graph,
-                                     center=(999.0, 999.0),
-                                     scale=300.0,
-                                     k=300.0)
+        for conn_tuple in connection_tuples:
+            if conn_tuple not in self._connections:
+                added_item = True
+                self._connections[conn_tuple] = ConnectionLine(conn_tuple[1].qos_profile)
+                self.addItem(self._connections[conn_tuple])
+            if conn_tuple in conns_to_remove:
+                del conns_to_remove[conn_tuple]
 
         for conn_tuple, item in conns_to_remove.items():
             self.removeItem(self._connections[conn_tuple])
             del self._connections[conn_tuple]
 
         if added_item or items_to_remove:
+            # TODO(clalancette): These hard-coded values aren't very good
+            pos = networkx.spring_layout(networkx_node_graph,
+                                         center=(999.0, 999.0),
+                                         scale=300.0,
+                                         k=300.0)
+
             for name, item in self._scene_items.items():
                 if name in pos:
                     self._animations_waiting.add(name)
@@ -559,10 +562,10 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         self.update()
 
     def update_connections(self):
-        for (from_name, to_name), item in self._connections.items():
-            if from_name in self._scene_items and to_name in self._scene_items:
-                item.update_path(self._scene_items[from_name].right(),
-                                 self._scene_items[to_name].left())
+        for (from_node, to_conn), item in self._connections.items():
+            if from_node in self._scene_items and to_conn.conn_name in self._scene_items:
+                item.update_path(self._scene_items[from_node].right(),
+                                 self._scene_items[to_conn.conn_name].left())
 
     def update_node_params(self, node_name, new_params):
         if node_name in self._scene_items:
@@ -729,8 +732,6 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 # TODO(clalancette): We currently rely on /parameter_events to get updates about
 # parameters in the system.  In the case where the user has that disabled, we
 # should provide an alternative way to refresh (button, or periodic, maybe?)
-
-# TODO(clalancette): Show QoS parameters for topics
 
 # TODO(clalancette): Allow the user to select just groups of nodes to concentrate on
 

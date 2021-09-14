@@ -24,8 +24,8 @@ import rcl_interfaces.srv
 import rclpy
 import rclpy.action
 import rclpy.node
+import rclpy.topic_endpoint_info
 import rclpy.topic_or_service_is_hidden
-
 
 IGNORED_TOPICS = (
     ('/parameter_events', 'rcl_interfaces/msg/ParameterEvent'),
@@ -119,15 +119,21 @@ def get_ros_parameter_value(parameter_value):
 
 class ROSConnection:
 
-    def __init__(self, conn_name, conn_type):
+    __slots__ = ('conn_name', 'conn_type', 'qos_profile')
+
+    def __init__(self, conn_name, conn_type, qos_profile):
         self.conn_name = conn_name
         self.conn_type = conn_type
+        self.qos_profile = qos_profile
 
     def __eq__(self, other):
-        return self.conn_name == other.conn_name and self.conn_type == other.conn_type
+        return self.conn_name == other.conn_name and self.conn_type == other.conn_type and self.qos_profile == other.qos_profile
 
     def __lt__(self, other):
         return self.conn_name < other.conn_name
+
+    def __hash__(self):
+        return hash(self.conn_name)
 
 
 class ROSNode:
@@ -167,23 +173,23 @@ class ROSNode:
     def set_component_manager(self, is_component_manager):
         self.is_component_manager = is_component_manager
 
-    def add_topic_publisher(self, topic_name, topic_type):
-        bisect.insort_left(self.topic_publishers, ROSConnection(topic_name, topic_type))
+    def add_topic_publisher(self, topic_name, topic_type, qos_profile):
+        bisect.insort_left(self.topic_publishers, ROSConnection(topic_name, topic_type, qos_profile))
 
     def add_service_client(self, service_name, service_type):
-        bisect.insort_left(self.service_clients, ROSConnection(service_name, service_type))
+        bisect.insort_left(self.service_clients, ROSConnection(service_name, service_type, None))
 
     def add_action_client(self, action_name, action_type):
-        bisect.insort_left(self.action_clients, ROSConnection(action_name, action_type))
+        bisect.insort_left(self.action_clients, ROSConnection(action_name, action_type, None))
 
-    def add_topic_subscriber(self, topic_name, topic_type):
-        bisect.insort_left(self.topic_subscribers, ROSConnection(topic_name, topic_type))
+    def add_topic_subscriber(self, topic_name, topic_type, qos_profile):
+        bisect.insort_left(self.topic_subscribers, ROSConnection(topic_name, topic_type, qos_profile))
 
     def add_service_server(self, service_name, service_type):
-        bisect.insort_left(self.service_servers, ROSConnection(service_name, service_type))
+        bisect.insort_left(self.service_servers, ROSConnection(service_name, service_type, None))
 
     def add_action_server(self, action_name, action_type):
-        bisect.insort_left(self.action_servers, ROSConnection(action_name, action_type))
+        bisect.insort_left(self.action_servers, ROSConnection(action_name, action_type, None))
 
 
 class ROSAsyncServiceStateMachine:
@@ -441,27 +447,55 @@ class ROSGraph:
             rosnode = ROSNode(fully_qualified_name)
 
             try:
+                # Topic publishers
                 for topic_name, topic_types in \
                         self._node.get_publisher_names_and_types_by_node(name, namespace):
-                    for topic_type in topic_types:
-                        rosnode.add_topic_publisher(topic_name, topic_type)
 
+                    for info in self._node.get_publishers_info_by_topic(topic_name):
+                        if info.endpoint_type != rclpy.topic_endpoint_info.TopicEndpointTypeEnum.PUBLISHER:
+                            # This should never happen, but just do it to be safe
+                            continue
+
+                        info_node_name = create_node_namespace(info.node_name, info.node_namespace)
+                        if info_node_name != fully_qualified_name:
+                            # TODO(clalancette): This wastes a lot of time
+                            # iterating over things that don't pertain to us,
+                            # can we do better?
+                            continue
+
+                        rosnode.add_topic_publisher(topic_name, info.topic_type, info.qos_profile)
+
+                # Service clients
                 for service_name, service_types in \
                         self._node.get_client_names_and_types_by_node(name, namespace):
                     for service_type in service_types:
                         rosnode.add_service_client(service_name, service_type)
 
+                # Action clients
                 action_clients = rclpy.action.get_action_client_names_and_types_by_node(
                     self._node, name, namespace)
                 for action_name, action_types in action_clients:
                     for action_type in action_types:
                         rosnode.add_action_client(action_name, action_type)
 
+                # Topic subscribers
                 for topic_name, topic_types in \
                         self._node.get_subscriber_names_and_types_by_node(name, namespace):
-                    for topic_type in topic_types:
-                        rosnode.add_topic_subscriber(topic_name, topic_type)
+                    for info in self._node.get_subscriptions_info_by_topic(topic_name):
+                        if info.endpoint_type != rclpy.topic_endpoint_info.TopicEndpointTypeEnum.SUBSCRIPTION:
+                            # This should never happen, but just do it to be safe
+                            continue
 
+                        info_node_name = create_node_namespace(info.node_name, info.node_namespace)
+                        if info_node_name != fully_qualified_name:
+                            # TODO(clalancette): This wastes a lot of time
+                            # iterating over things that don't pertain to us,
+                            # can we do better?
+                            continue
+
+                        rosnode.add_topic_subscriber(topic_name, info.topic_type, info.qos_profile)
+
+                # Service servers
                 for service_name, service_types in \
                         self._node.get_service_names_and_types_by_node(name, namespace):
                     for service_type in service_types:
@@ -474,6 +508,7 @@ class ROSGraph:
                            service_type == 'composition_interfaces/srv/ListNodes':
                             rosnode.set_component_manager(True)
 
+                # Action servers
                 action_servers = rclpy.action.get_action_server_names_and_types_by_node(
                     self._node, name, namespace)
                 for action_name, action_types in action_servers:

@@ -7,6 +7,7 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 
 * [ ] Show a legend/help for describing what everything does
 * [x] Allow zooming in or out on the entire scene
+* [ ] Have some kind of side panel to show warnings, errors, incompatible QoS, etc.
 
 ## Nodes
 
@@ -36,7 +37,7 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 * [x] Draw a line between the published and subscribed topics in the network
 * [x] Hide default topics like /parameter_events, /rosout by default (with option to turn on)
 * [x] Show the type for each topic
-* [ ] Show the Quality-of-Service settings for each topic
+* [x] Show the Quality-of-Service settings for each topic
 * [ ] Show the rate (hz) at which a topic is publishing data
 * [ ] Show the bandwidth that a topic is using
 * [ ] Have the ability to hide one or more topics on a node (how do we get them back?)

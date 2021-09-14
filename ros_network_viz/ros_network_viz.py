@@ -80,13 +80,12 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
             ])
             self.setToolTip(text)
 
-        self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['connection_line']))
-        self._pen.setWidth(3)
+        self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['connection_line']), 3)
 
         self._pen_sel = QtGui.QPen(
-            convert_hex_to_color(COLOR_PALETTE['connection_line_highlight'])
+            convert_hex_to_color(COLOR_PALETTE['connection_line_highlight']),
+            5
         )
-        self._pen_sel.setWidth(5)
 
         self.setPen(self._pen)
 
@@ -144,19 +143,17 @@ class NodeBox(QtWidgets.QGraphicsObject):
         else:
             self._brush.setColor(convert_hex_to_color(COLOR_PALETTE['regular_node']))
 
-        self._pen = QtGui.QPen()
-        self._pen.setStyle(QtCore.Qt.SolidLine)
-        self._pen.setWidth(self._node_border)
-        self._pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_border']))
+        self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['node_border']),
+                               self._node_border,
+                               QtCore.Qt.SolidLine)
 
-        self._pen_sel = QtGui.QPen()
-        self._pen_sel.setStyle(QtCore.Qt.SolidLine)
-        self._pen_sel.setWidth(self._node_border)
-        self._pen_sel.setColor(convert_hex_to_color(COLOR_PALETTE['node_border_highlight']))
+        self._pen_sel = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['node_border_highlight']),
+                                   self._node_border,
+                                   QtCore.Qt.SolidLine)
 
-        self._text_pen = QtGui.QPen()
-        self._text_pen.setStyle(QtCore.Qt.SolidLine)
-        self._text_pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_text']))
+        self._text_pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['node_text']),
+                                    0,
+                                    QtCore.Qt.SolidLine)
 
         self._node_text_font = QtGui.QFont('Arial', 12, QtGui.QFont.Bold)
 
@@ -282,23 +279,20 @@ class ConnectionBox(QtWidgets.QGraphicsObject):
         self.setFlag(QtWidgets.QGraphicsObject.ItemIsMovable)
         self.setFlag(QtWidgets.QGraphicsObject.ItemIsSelectable)
 
-        self._brush = QtGui.QBrush()
-        self._brush.setStyle(QtCore.Qt.SolidPattern)
-        self._brush.setColor(convert_hex_to_color(COLOR_PALETTE[bg_color]))
+        self._brush = QtGui.QBrush(convert_hex_to_color(COLOR_PALETTE[bg_color]),
+                                   QtCore.Qt.SolidPattern)
 
-        self._pen = QtGui.QPen()
-        self._pen.setStyle(QtCore.Qt.SolidLine)
-        self._pen.setWidth(self._node_border)
-        self._pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_border']))
+        self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['node_border']),
+                               self._node_border,
+                               QtCore.Qt.SolidLine)
 
-        self._pen_sel = QtGui.QPen()
-        self._pen_sel.setStyle(QtCore.Qt.SolidLine)
-        self._pen_sel.setWidth(self._node_border)
-        self._pen_sel.setColor(convert_hex_to_color(COLOR_PALETTE['node_border_highlight']))
+        self._pen_sel = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['node_border_highlight']),
+                                   self._node_border,
+                                   QtCore.Qt.SolidLine)
 
-        self._text_pen = QtGui.QPen()
-        self._text_pen.setStyle(QtCore.Qt.SolidLine)
-        self._text_pen.setColor(convert_hex_to_color(COLOR_PALETTE['node_text']))
+        self._text_pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['node_text']),
+                                    0,
+                                    QtCore.Qt.SolidLine)
 
         self._node_text_font = QtGui.QFont('Arial', 10, QtGui.QFont.Normal)
 
@@ -383,13 +377,10 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
         self._grid_size = 36
 
-        self._brush = QtGui.QBrush()
-        self._brush.setStyle(QtCore.Qt.SolidPattern)
-        self._brush.setColor(convert_hex_to_color(COLOR_PALETTE['background']))
+        self._brush = QtGui.QBrush(convert_hex_to_color(COLOR_PALETTE['background']),
+                                   QtCore.Qt.SolidPattern)
 
-        self._pen = QtGui.QPen()
-        self._pen.setColor(convert_hex_to_color(COLOR_PALETTE['grid_line']))
-        self._pen.setWidth(0)
+        self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['grid_line']), 0)
 
         self._right_click_menu = QtWidgets.QMenu()
 

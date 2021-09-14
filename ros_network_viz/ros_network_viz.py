@@ -83,9 +83,7 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
         self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['connection_line']), 3)
 
         self._pen_sel = QtGui.QPen(
-            convert_hex_to_color(COLOR_PALETTE['connection_line_highlight']),
-            5
-        )
+            convert_hex_to_color(COLOR_PALETTE['connection_line_highlight']), 5)
 
         self.setPen(self._pen)
 
@@ -365,6 +363,13 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
     new_nodes_signal = QtCore.pyqtSignal(list, name='newNodes')
 
+    def create_bool_right_click_action(self, name, boolean_variable, callback):
+        action = QtWidgets.QAction(name, self)
+        action.setCheckable(True)
+        action.setChecked(boolean_variable)
+        action.triggered.connect(callback)
+        return action
+
     def __init__(self, parent):
         super().__init__(parent)
 
@@ -385,38 +390,30 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         self._right_click_menu = QtWidgets.QMenu()
 
         self._show_hidden_nodes = False
-        self._hidden_node_action = QtWidgets.QAction('Show Hidden Nodes', self)
-        self._hidden_node_action.setCheckable(True)
-        self._hidden_node_action.setChecked(self._show_hidden_nodes)
-        self._hidden_node_action.triggered.connect(self.hidden_nodes_toggle)
+        self._hidden_node_action = self.create_bool_right_click_action(
+            'Show Hidden Nodes', self._show_hidden_nodes, self.hidden_nodes_toggle)
         self._right_click_menu.addAction(self._hidden_node_action)
 
         self._show_rqt_network_node = False
-        self._hidden_rqt_network_action = QtWidgets.QAction('Show rqt_network node', self)
-        self._hidden_rqt_network_action.setCheckable(True)
-        self._hidden_rqt_network_action.setChecked(self._show_rqt_network_node)
-        self._hidden_rqt_network_action.triggered.connect(self.hidden_rqt_network_toggle)
+        self._hidden_rqt_network_action = self.create_bool_right_click_action(
+            'Show rqt_network node', self._show_rqt_network_node, self.hidden_rqt_network_toggle)
         self._right_click_menu.addAction(self._hidden_rqt_network_action)
 
         self._show_hidden_topics = False
-        self._hidden_topics_action = QtWidgets.QAction('Show default hidden topics', self)
-        self._hidden_topics_action.setCheckable(True)
-        self._hidden_topics_action.setChecked(self._show_hidden_topics)
-        self._hidden_topics_action.triggered.connect(self.hidden_topics_toggle)
+        self._hidden_topics_action = self.create_bool_right_click_action(
+            'Show default hidden topics', self._show_hidden_topics, self.hidden_topics_toggle)
         self._right_click_menu.addAction(self._hidden_topics_action)
 
         self._show_hidden_services = False
-        self._hidden_services_action = QtWidgets.QAction('Show default hidden services', self)
-        self._hidden_services_action.setCheckable(True)
-        self._hidden_services_action.setChecked(self._show_hidden_services)
-        self._hidden_services_action.triggered.connect(self.hidden_services_toggle)
+        self._hidden_services_action = self.create_bool_right_click_action(
+            'Show default hidden services',
+            self._show_hidden_services,
+            self.hidden_services_toggle)
         self._right_click_menu.addAction(self._hidden_services_action)
 
         self._live_updates = True
-        self._live_updates_action = QtWidgets.QAction('Update scene as graph changes')
-        self._live_updates_action.setCheckable(True)
-        self._live_updates_action.setChecked(self._live_updates)
-        self._live_updates_action.triggered.connect(self.live_updates_toggle)
+        self._live_updates_action = self.create_bool_right_click_action(
+            'Update scene as graph changes', self._live_updates, self.live_updates_toggle)
         self._right_click_menu.addAction(self._live_updates_action)
 
         self.newNodeParams.connect(self.update_node_params)

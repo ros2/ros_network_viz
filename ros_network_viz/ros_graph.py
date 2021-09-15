@@ -445,6 +445,14 @@ class ROSGraph:
     def get_nodes(self):
         nodes = []
 
+        # These two dicts are meant to store
+        # (topic_name, node_name) -> TopicEndpointInfo for publishers and
+        # subscriptions, respectively.  We store these for performance, so we
+        # aren't iterating over the topic info over and over again when a topic
+        # apperars in multiple nodes.
+        pub_info_list = {}
+        sub_info_list = {}
+
         # If we ever see that the shutting_down_lock is locked, we know that
         # the program is going down.  Don't do any work in that case.
         if not self._shutting_down_lock.acquire(blocking=False):
@@ -459,19 +467,22 @@ class ROSGraph:
                 for topic_name, topic_types in \
                         self._node.get_publisher_names_and_types_by_node(name, namespace):
 
-                    for info in self._node.get_publishers_info_by_topic(topic_name):
-                        if info.endpoint_type != TopicEndpointTypeEnum.PUBLISHER:
-                            # This should never happen, but just check it to be safe
-                            continue
+                    topic_info_tuple = (topic_name, fully_qualified_name)
 
-                        info_node_name = create_node_namespace(info.node_name, info.node_namespace)
-                        if info_node_name != fully_qualified_name:
-                            # TODO(clalancette): This wastes a lot of time
-                            # iterating over things that don't pertain to us,
-                            # can we do better?
-                            continue
+                    if topic_info_tuple not in pub_info_list:
+                        for info in self._node.get_publishers_info_by_topic(topic_name):
+                            if info.endpoint_type != TopicEndpointTypeEnum.PUBLISHER:
+                                # This should never happen, but just check it to be safe
+                                continue
 
-                        rosnode.add_topic_publisher(topic_name, info.topic_type, info.qos_profile)
+                            info_node_name = create_node_namespace(info.node_name,
+                                                                   info.node_namespace)
+                            pub_info_list[(topic_name, info_node_name)] = info
+
+                    if topic_info_tuple in pub_info_list:
+                        topic_info = pub_info_list[topic_info_tuple]
+                        rosnode.add_topic_publisher(topic_name, topic_info.topic_type,
+                                                    topic_info.qos_profile)
 
                 # Service clients
                 for service_name, service_types in \
@@ -489,19 +500,23 @@ class ROSGraph:
                 # Topic subscribers
                 for topic_name, topic_types in \
                         self._node.get_subscriber_names_and_types_by_node(name, namespace):
-                    for info in self._node.get_subscriptions_info_by_topic(topic_name):
-                        if info.endpoint_type != TopicEndpointTypeEnum.SUBSCRIPTION:
-                            # This should never happen, but just check it to be safe
-                            continue
 
-                        info_node_name = create_node_namespace(info.node_name, info.node_namespace)
-                        if info_node_name != fully_qualified_name:
-                            # TODO(clalancette): This wastes a lot of time
-                            # iterating over things that don't pertain to us,
-                            # can we do better?
-                            continue
+                    topic_info_tuple = (topic_name, fully_qualified_name)
 
-                        rosnode.add_topic_subscriber(topic_name, info.topic_type, info.qos_profile)
+                    if topic_info_tuple not in sub_info_list:
+                        for info in self._node.get_subscriptions_info_by_topic(topic_name):
+                            if info.endpoint_type != TopicEndpointTypeEnum.SUBSCRIPTION:
+                                # This should never happen, but just check it to be safe
+                                continue
+
+                            info_node_name = create_node_namespace(info.node_name,
+                                                                   info.node_namespace)
+                            sub_info_list[(topic_name, info_node_name)] = info
+
+                    if topic_info_tuple in sub_info_list:
+                        topic_info = sub_info_list[topic_info_tuple]
+                        rosnode.add_topic_subscriber(topic_name, topic_info.topic_type,
+                                                     topic_info.qos_profile)
 
                 # Service servers
                 for service_name, service_types in \

@@ -321,36 +321,34 @@ class ROSParameterStateMachine:
             self._list_state_machine.reset()
             return self._parameters
 
-        self._parameters_lock.acquire()
-        for i, name in enumerate(self._param_names):
-            if name not in self._parameters:
-                val = get_ros_parameter_value(get_params_response.values[i])
-                self._parameters[name] = val
-            else:
-                if self._parameters[name] is None:
-                    del self._parameters[name]
-        self._parameters_lock.release()
+        with self._parameters_lock:
+            for i, name in enumerate(self._param_names):
+                if name not in self._parameters:
+                    val = get_ros_parameter_value(get_params_response.values[i])
+                    self._parameters[name] = val
+                else:
+                    if self._parameters[name] is None:
+                        del self._parameters[name]
 
         return self._parameters
 
     def update_parameters_from_msg(self, msg):
-        self._parameters_lock.acquire()
-        for param in msg.new_parameters:
-            self._parameters[param.name] = get_ros_parameter_value(param.value)
-        for param in msg.changed_parameters:
-            self._parameters[param.name] = get_ros_parameter_value(param.value)
-        for param in msg.deleted_parameters:
-            if param.name in self._parameters:
-                del self._parameters[param.name]
-            else:
-                # If we get here and the parameter name is not in
-                # self._parameters, then this callback may have happened before
-                # we got the initial response from the 'get_parameters' service
-                # call.  In that case, actually *add* the parameter to the dict
-                # as "None", and then the 'get_parameters' machinery should
-                # eventually remove it.
-                self._parameters[param.name] = None
-        self._parameters_lock.release()
+        with self._parameters_lock:
+            for param in msg.new_parameters:
+                self._parameters[param.name] = get_ros_parameter_value(param.value)
+            for param in msg.changed_parameters:
+                self._parameters[param.name] = get_ros_parameter_value(param.value)
+            for param in msg.deleted_parameters:
+                if param.name in self._parameters:
+                    del self._parameters[param.name]
+                else:
+                    # If we get here and the parameter name is not in
+                    # self._parameters, then this callback may have happened before
+                    # we got the initial response from the 'get_parameters' service
+                    # call.  In that case, actually *add* the parameter to the dict
+                    # as "None", and then the 'get_parameters' machinery should
+                    # eventually remove it.
+                    self._parameters[param.name] = None
 
 
 class ROSLifecycleStateMachine:
@@ -377,17 +375,15 @@ class ROSLifecycleStateMachine:
     def step(self):
         lifecycle_state_response = self._lc_state_machine.step()
         if self._lc_state_machine.has_initial_response() and lifecycle_state_response:
-            self._lifecycle_state_lock.acquire()
-            if self._lifecycle_state is None:
-                self._lifecycle_state = lifecycle_state_response.current_state.label
-            self._lifecycle_state_lock.release()
+            with self._lifecycle_state_lock:
+                if self._lifecycle_state is None:
+                    self._lifecycle_state = lifecycle_state_response.current_state.label
 
         return self._lifecycle_state
 
     def lifecycle_transition_cb(self, msg):
-        self._lifecycle_state_lock.acquire()
-        self._lifecycle_state = msg.goal_state.label
-        self._lifecycle_state_lock.release()
+        with self._lifecycle_state_lock:
+            self._lifecycle_state = msg.goal_state.label
 
 
 class ROSComponentManagerListNodesStateMachine:

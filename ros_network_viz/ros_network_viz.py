@@ -719,7 +719,7 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
         ret = self._ros_network.get_node_parameters(node_name)
         if ret and ret != self._node_parameters[node_name]:
             self.scene().newNodeParams.emit(node_name, ret)
-            self._node_parameters[node_name] = ret
+            self._node_parameters[node_name] = dict(ret)
 
     def update_lifecycle_state(self, node_name):
         if node_name not in self._lifecycle_states:
@@ -732,12 +732,12 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def update_component_manager_nodes(self, node_name):
         if node_name not in self._component_manager_nodes:
-            self._component_manager_nodes[node_name] = None
+            self._component_manager_nodes[node_name] = []
 
         ret = self._ros_network.get_component_manager_nodes(node_name)
         if ret and ret != self._component_manager_nodes[node_name]:
             self.scene().newComponentManagerNodes.emit(node_name, ret)
-            self._component_manager_nodes[node_name] = ret
+            self._component_manager_nodes[node_name] = list(ret)
 
     def get_new_edges(self):
         start = time.time()

@@ -470,6 +470,9 @@ class ROSGraph:
                     topic_info_tuple = (topic_name, fully_qualified_name)
 
                     if topic_info_tuple not in pub_info_list:
+                        # If we couldn't find the topic info in the
+                        # pub_info_list dict, we get information about and enter
+                        # in tuples for *all* node names.
                         for info in self._node.get_publishers_info_by_topic(topic_name):
                             if info.endpoint_type != TopicEndpointTypeEnum.PUBLISHER:
                                 # This should never happen, but just check it to be safe
@@ -483,6 +486,12 @@ class ROSGraph:
                         topic_info = pub_info_list[topic_info_tuple]
                         rosnode.add_topic_publisher(topic_name, topic_info.topic_type,
                                                     topic_info.qos_profile)
+                    else:
+                        # In this case, we couldn't get info for the topic for
+                        # for some reason.  Since we know that the topic is
+                        # valid, just insert them without QoS profiles.
+                        for topic_type in topic_types:
+                            rosnode.add_topic_publisher(topic_name, topic_info.topic_type, None)
 
                 # Service clients
                 for service_name, service_types in \
@@ -504,6 +513,9 @@ class ROSGraph:
                     topic_info_tuple = (topic_name, fully_qualified_name)
 
                     if topic_info_tuple not in sub_info_list:
+                        # If we couldn't find the topic info in the
+                        # sub_info_list dict, we get information about and enter
+                        # in tuples for *all* node names.
                         for info in self._node.get_subscriptions_info_by_topic(topic_name):
                             if info.endpoint_type != TopicEndpointTypeEnum.SUBSCRIPTION:
                                 # This should never happen, but just check it to be safe
@@ -517,6 +529,12 @@ class ROSGraph:
                         topic_info = sub_info_list[topic_info_tuple]
                         rosnode.add_topic_subscriber(topic_name, topic_info.topic_type,
                                                      topic_info.qos_profile)
+                    else:
+                        # In this case, we couldn't get info for the topic for
+                        # for some reason.  Since we know that the topic is
+                        # valid, just insert them without QoS profiles.
+                        for topic_type in topic_types:
+                            rosnode.add_topic_publisher(topic_name, topic_info.topic_type, None)
 
                 # Service servers
                 for service_name, service_types in \

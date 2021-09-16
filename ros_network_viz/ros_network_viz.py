@@ -22,6 +22,8 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from ros_network_viz.ros_graph import ROSGraph, service_is_hidden, topic_is_hidden
 
+# Most of the colors in this palette are from
+# https://coolors.co/001219-005f73-0a9396-94d2bd-e9d8a6-ee9b00-ca6702-bb3e03-ae2012-9b2226
 COLOR_PALETTE = {
     'connection_line': 'f48c06',
     'connection_line_highlight': 'ffba08',
@@ -33,7 +35,7 @@ COLOR_PALETTE = {
     'node_text': 'e6e6e6',
     'topic': '005f73',
     'service': 'bb3e03',
-    'action': 'e9d8a6',
+    'action': 'ca6702',
     'background': '282828',
     'grid_line': '323232',
 }

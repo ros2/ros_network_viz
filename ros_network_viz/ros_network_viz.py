@@ -714,6 +714,8 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def update_parameters(self, node_name):
         if node_name not in self._node_parameters:
+            # TODO(clalancette): This leaks because nodes added to the dict
+            # will never be deleted, even when the node goes away
             self._node_parameters[node_name] = {}
 
         ret = self._ros_network.get_node_parameters(node_name)
@@ -723,6 +725,8 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def update_lifecycle_state(self, node_name):
         if node_name not in self._lifecycle_states:
+            # TODO(clalancette): This leaks because nodes added to the dict
+            # will never be deleted, even when the node goes away
             self._lifecycle_states[node_name] = None
 
         ret = self._ros_network.get_lifecycle_node_state(node_name)
@@ -732,6 +736,8 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def update_component_manager_nodes(self, node_name):
         if node_name not in self._component_manager_nodes:
+            # TODO(clalancette): This leaks because nodes added to the dict
+            # will never be deleted, even when the node goes away
             self._component_manager_nodes[node_name] = []
 
         ret = self._ros_network.get_component_manager_nodes(node_name)

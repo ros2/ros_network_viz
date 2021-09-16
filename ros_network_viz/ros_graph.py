@@ -418,7 +418,7 @@ class ROSGraph:
 
     def __init__(self):
         rclpy.init()
-        self._node = rclpy.create_node('rqt_network')
+        self._node = rclpy.create_node('_rqt_network')
 
         self._param_events_sub = self._node.create_subscription(rcl_interfaces.msg.ParameterEvent,
                                                                 '/parameter_events',

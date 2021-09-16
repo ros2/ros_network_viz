@@ -394,11 +394,6 @@ class NetworkScene(QtWidgets.QGraphicsScene):
             'Show Hidden Nodes', self._show_hidden_nodes, self.hidden_nodes_toggle)
         self._right_click_menu.addAction(self._hidden_node_action)
 
-        self._show_rqt_network_node = False
-        self._hidden_rqt_network_action = self.create_bool_right_click_action(
-            'Show rqt_network node', self._show_rqt_network_node, self.hidden_rqt_network_toggle)
-        self._right_click_menu.addAction(self._hidden_rqt_network_action)
-
         self._show_hidden_topics = False
         self._hidden_topics_action = self.create_bool_right_click_action(
             'Show default hidden topics', self._show_hidden_topics, self.hidden_topics_toggle)
@@ -454,10 +449,6 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         if self._has_hidden_nodes:
             self.update_nodes(self._graph_nodes_list)
 
-    def hidden_rqt_network_toggle(self, checked):
-        self._show_rqt_network_node = checked
-        self.update_nodes(self._graph_nodes_list)
-
     def hidden_topics_toggle(self, checked):
         self._show_hidden_topics = checked
         self.update_nodes(self._graph_nodes_list)
@@ -487,10 +478,6 @@ class NetworkScene(QtWidgets.QGraphicsScene):
             if node.name.startswith('/_'):
                 self._has_hidden_nodes = True
                 if not self._show_hidden_nodes:
-                    should_remove = True
-
-            if not self._show_rqt_network_node:
-                if node.name == '/rqt_network':
                     should_remove = True
 
             if should_remove:

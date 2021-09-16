@@ -50,11 +50,10 @@ def convert_hex_to_color(data):
         r = data[0:2]
         g = data[2:4]
         b = data[4:6]
-    elif len(data) == 7:
-        if data[0] == '#':
-            r = data[1:3]
-            g = data[3:5]
-            b = data[5:7]
+    elif len(data) == 7 and data[0] == '#':
+        r = data[1:3]
+        g = data[3:5]
+        b = data[5:7]
 
     if r is not None and g is not None and b is not None:
         return QtGui.QColor(int(r, 16), int(g, 16), int(b, 16))

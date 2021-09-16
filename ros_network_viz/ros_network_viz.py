@@ -512,7 +512,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                 if topic.conn_name in items_to_remove:
                     del items_to_remove[topic.conn_name]
 
-                networkx_node_graph.add_edges_from([(node.name, topic.conn_name)])
+                networkx_node_graph.add_edge(node.name, topic.conn_name)
                 connection_tuples.append((node.name, topic))
 
             for service in node.service_clients + node.service_servers:
@@ -532,7 +532,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                 if service.conn_name in items_to_remove:
                     del items_to_remove[service.conn_name]
 
-                networkx_node_graph.add_edges_from([(node.name, service.conn_name)])
+                networkx_node_graph.add_edge(node.name, service.conn_name)
                 connection_tuples.append((node.name, service))
 
             for action in node.action_clients + node.action_servers:
@@ -546,7 +546,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                 if action.conn_name in items_to_remove:
                     del items_to_remove[action.conn_name]
 
-                networkx_node_graph.add_edges_from([(node.name, action.conn_name)])
+                networkx_node_graph.add_edge(node.name, action.conn_name)
                 connection_tuples.append((node.name, action))
 
         for name, item in items_to_remove.items():
@@ -568,10 +568,9 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
         if added_item or items_to_remove:
             # TODO(clalancette): These hard-coded values aren't very good
-            pos = networkx.spring_layout(networkx_node_graph,
-                                         center=(999.0, 999.0),
-                                         scale=300.0,
-                                         k=300.0)
+            pos = networkx.kamada_kawai_layout(networkx_node_graph,
+                                               center=(999.0, 999.0),
+                                               scale=500.0)
 
             for name, item in self._scene_items.items():
                 if name in pos:

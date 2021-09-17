@@ -54,6 +54,10 @@ LIFECYCLE_IGNORED_SERVICES = (
 )
 
 
+def node_is_hidden(name):
+    return name.startswith('/_')
+
+
 def topic_is_hidden(name, topic_type):
     # First check if rclpy considers this a hidden topic
     if rclpy.topic_or_service_is_hidden.topic_or_service_is_hidden(name):
@@ -136,6 +140,9 @@ class ROSConnection:
 
     def __hash__(self):
         return hash(self.conn_name)
+
+    def __repr__(self):
+        return self.conn_name
 
 
 class ROSNodeInfo:
@@ -225,9 +232,6 @@ class ROSAsyncServiceStateMachine:
 
     def step(self):
         if self._state == self.NEEDS_CLIENT:
-            # TODO(clalancette): If we never make it to HAS_INITIAL_RESPONSE,
-            # or we are doing periodic refresh, then we are never destroying
-            # this client.
             self._client = self._rosnode.create_client(self._rostype,
                                                        f'{self._node_name}/{self._service_name}')
             self._state = self.NEEDS_CLIENT_READY
@@ -455,25 +459,135 @@ class ROSGraph:
         self._spin_thread = threading.Thread(target=self._executor.spin)
         self._spin_thread.start()
 
+    def get_topic_publishers(self, fully_qualified_name, name, namespace,
+                             nodeinfo, pub_info_list):
+
+        for topic_name, topic_types in \
+                self._node.get_publisher_names_and_types_by_node(name, namespace):
+            for topic_type in topic_types:
+                topic_info_tuple = (fully_qualified_name, topic_name, topic_type)
+
+                topic_info = None
+                if topic_info_tuple in pub_info_list:
+                    topic_info = pub_info_list[topic_info_tuple]
+                else:
+                    # If we couldn't find the topic info in the pub_info_list
+                    # dict, we get information about and enter in tuples for
+                    # *all* node names.
+                    for info in self._node.get_publishers_info_by_topic(topic_name):
+                        if info.endpoint_type != TopicEndpointTypeEnum.PUBLISHER:
+                            # This should never happen, but just check it to be safe
+                            continue
+
+                        info_node_name = create_node_namespace(info.node_name,
+                                                               info.node_namespace)
+                        this_tuple = (info_node_name, topic_name, info.topic_type)
+                        pub_info_list[this_tuple] = info
+
+                        if this_tuple == topic_info_tuple:
+                            topic_info = info
+
+                if topic_info is not None:
+                    nodeinfo.add_topic_publisher(topic_name,
+                                                 topic_info.topic_type,
+                                                 topic_info.qos_profile)
+
+                else:
+                    # We couldn't get info for the topic for some reason.  Since
+                    # we know that the topic is valid, insert it without a QoS
+                    # profile.
+                    nodeinfo.add_topic_publisher(topic_name, topic_type, None)
+
+    def get_service_clients(self, name, namespace, nodeinfo):
+        for service_name, service_types in \
+                self._node.get_client_names_and_types_by_node(name, namespace):
+            for service_type in service_types:
+                nodeinfo.add_service_client(service_name, service_type)
+
+    def get_action_clients(self, name, namespace, nodeinfo):
+        action_clients = rclpy.action.get_action_client_names_and_types_by_node(
+            self._node, name, namespace)
+        for action_name, action_types in action_clients:
+            for action_type in action_types:
+                nodeinfo.add_action_client(action_name, action_type)
+
+    def get_topic_subscribers(self, fully_qualified_name, name, namespace,
+                              nodeinfo, sub_info_list):
+        for topic_name, topic_types in \
+                self._node.get_subscriber_names_and_types_by_node(name, namespace):
+
+            for topic_type in topic_types:
+                topic_info_tuple = (fully_qualified_name, topic_name, topic_type)
+
+                topic_info = None
+                if topic_info_tuple in sub_info_list:
+                    topic_info = sub_info_list[topic_info_tuple]
+                else:
+                    # If we couldn't find the topic info in the sub_info_list
+                    # dict, we get information about and enter in tuples for
+                    # *all* node names.
+                    for info in self._node.get_subscriptions_info_by_topic(topic_name):
+                        if info.endpoint_type != TopicEndpointTypeEnum.SUBSCRIPTION:
+                            # This should never happen, but just check it to be safe
+                            continue
+
+                        info_node_name = create_node_namespace(info.node_name,
+                                                               info.node_namespace)
+                        this_tuple = (info_node_name, topic_name, info.topic_type)
+                        sub_info_list[this_tuple] = info
+
+                        if this_tuple == topic_info_tuple:
+                            topic_info = info
+
+                if topic_info is not None:
+                    nodeinfo.add_topic_subscriber(topic_name,
+                                                  topic_info.topic_type,
+                                                  topic_info.qos_profile)
+
+                else:
+                    # We couldn't get info for the topic for some reason.  Since
+                    # we know that the topic is valid, insert it without a QoS
+                    # profile.
+                    nodeinfo.add_topic_subscriber(topic_name, topic_type, None)
+
+    def get_service_servers(self, name, namespace, nodeinfo):
+        for service_name, service_types in \
+                self._node.get_service_names_and_types_by_node(name, namespace):
+            for service_type in service_types:
+                nodeinfo.add_service_server(service_name, service_type)
+                if 'get_state' in service_name and \
+                   service_type == 'lifecycle_msgs/srv/GetState':
+                    nodeinfo.set_lifecycle(True)
+
+                if 'list_nodes' in service_name and \
+                   service_type == 'composition_interfaces/srv/ListNodes':
+                    nodeinfo.set_component_manager(True)
+
+    def get_action_servers(self, name, namespace, nodeinfo):
+        action_servers = rclpy.action.get_action_server_names_and_types_by_node(
+            self._node, name, namespace)
+        for action_name, action_types in action_servers:
+            for action_type in action_types:
+                nodeinfo.add_action_server(action_name, action_type)
+
     def get_nodes(self):
-        nodes = []
+        nodes = {}
+
+        # If we ever see that shutting_down_lock is locked, we know that the
+        # program is shutting down.  Don't do any work in that case.
+        if not self._shutting_down_lock.acquire(blocking=False):
+            return nodes
 
         param_names_to_remove = set(self._param_state_machines.keys())
         lc_names_to_remove = set(self._lc_state_state_machines.keys())
         cm_names_to_remove = set(self._cm_nodes_state_machines.keys())
 
-        # These two dicts are meant to store
-        # (topic_name, node_name) -> TopicEndpointInfo for publishers and
-        # subscriptions, respectively.  We store these for performance, so we
-        # aren't iterating over the topic info over and over again when a topic
-        # apperars in multiple nodes.
+        # These two dicts store (node_name, topic_name, topic_type) -> TopicEndpointInfo
+        # for publishers and subscribers, respectively.  We store these for
+        # performance, so we aren't iterating over the topic info over and over
+        # again when a topic apperars in multiple nodes.
         pub_info_list = {}
         sub_info_list = {}
-
-        # If we ever see that the shutting_down_lock is locked, we know that
-        # the program is going down.  Don't do any work in that case.
-        if not self._shutting_down_lock.acquire(blocking=False):
-            return nodes
 
         for name, namespace in self._node.get_node_names_and_namespaces():
             fully_qualified_name = create_node_namespace(name, namespace)
@@ -484,98 +598,19 @@ class ROSGraph:
             cm_names_to_remove.discard(fully_qualified_name)
 
             try:
-                # Topic publishers
-                for topic_name, topic_types in \
-                        self._node.get_publisher_names_and_types_by_node(name, namespace):
+                self.get_topic_publishers(fully_qualified_name, name, namespace,
+                                          nodeinfo, pub_info_list)
 
-                    topic_info_tuple = (topic_name, fully_qualified_name)
+                self.get_service_clients(name, namespace, nodeinfo)
 
-                    if topic_info_tuple not in pub_info_list:
-                        # If we couldn't find the topic info in the
-                        # pub_info_list dict, we get information about and enter
-                        # in tuples for *all* node names.
-                        for info in self._node.get_publishers_info_by_topic(topic_name):
-                            if info.endpoint_type != TopicEndpointTypeEnum.PUBLISHER:
-                                # This should never happen, but just check it to be safe
-                                continue
+                self.get_action_clients(name, namespace, nodeinfo)
 
-                            info_node_name = create_node_namespace(info.node_name,
-                                                                   info.node_namespace)
-                            pub_info_list[(topic_name, info_node_name)] = info
+                self.get_topic_subscribers(fully_qualified_name, name, namespace,
+                                           nodeinfo, sub_info_list)
 
-                    if topic_info_tuple in pub_info_list:
-                        topic_info = pub_info_list[topic_info_tuple]
-                        nodeinfo.add_topic_publisher(topic_name, topic_info.topic_type,
-                                                     topic_info.qos_profile)
-                    else:
-                        # In this case, we couldn't get info for the topic for
-                        # for some reason.  Since we know that the topic is
-                        # valid, just insert them without QoS profiles.
-                        for topic_type in topic_types:
-                            nodeinfo.add_topic_publisher(topic_name, topic_info.topic_type, None)
+                self.get_service_servers(name, namespace, nodeinfo)
 
-                # Service clients
-                for service_name, service_types in \
-                        self._node.get_client_names_and_types_by_node(name, namespace):
-                    for service_type in service_types:
-                        nodeinfo.add_service_client(service_name, service_type)
-
-                # Action clients
-                action_clients = rclpy.action.get_action_client_names_and_types_by_node(
-                    self._node, name, namespace)
-                for action_name, action_types in action_clients:
-                    for action_type in action_types:
-                        nodeinfo.add_action_client(action_name, action_type)
-
-                # Topic subscribers
-                for topic_name, topic_types in \
-                        self._node.get_subscriber_names_and_types_by_node(name, namespace):
-
-                    topic_info_tuple = (topic_name, fully_qualified_name)
-
-                    if topic_info_tuple not in sub_info_list:
-                        # If we couldn't find the topic info in the
-                        # sub_info_list dict, we get information about and enter
-                        # in tuples for *all* node names.
-                        for info in self._node.get_subscriptions_info_by_topic(topic_name):
-                            if info.endpoint_type != TopicEndpointTypeEnum.SUBSCRIPTION:
-                                # This should never happen, but just check it to be safe
-                                continue
-
-                            info_node_name = create_node_namespace(info.node_name,
-                                                                   info.node_namespace)
-                            sub_info_list[(topic_name, info_node_name)] = info
-
-                    if topic_info_tuple in sub_info_list:
-                        topic_info = sub_info_list[topic_info_tuple]
-                        nodeinfo.add_topic_subscriber(topic_name, topic_info.topic_type,
-                                                      topic_info.qos_profile)
-                    else:
-                        # In this case, we couldn't get info for the topic for
-                        # for some reason.  Since we know that the topic is
-                        # valid, just insert them without QoS profiles.
-                        for topic_type in topic_types:
-                            nodeinfo.add_topic_publisher(topic_name, topic_info.topic_type, None)
-
-                # Service servers
-                for service_name, service_types in \
-                        self._node.get_service_names_and_types_by_node(name, namespace):
-                    for service_type in service_types:
-                        nodeinfo.add_service_server(service_name, service_type)
-                        if 'get_state' in service_name and \
-                           service_type == 'lifecycle_msgs/srv/GetState':
-                            nodeinfo.set_lifecycle(True)
-
-                        if 'list_nodes' in service_name and \
-                           service_type == 'composition_interfaces/srv/ListNodes':
-                            nodeinfo.set_component_manager(True)
-
-                # Action servers
-                action_servers = rclpy.action.get_action_server_names_and_types_by_node(
-                    self._node, name, namespace)
-                for action_name, action_types in action_servers:
-                    for action_type in action_types:
-                        nodeinfo.add_action_server(action_name, action_type)
+                self.get_action_servers(name, namespace, nodeinfo)
 
             except rclpy.node.NodeNameNonExistentError:
                 # It's possible that the node exited between when we saw it
@@ -587,7 +622,7 @@ class ROSGraph:
             # errors from the rclpy API (like RCLError), not crash, and report
             # them somehow to the user
 
-            bisect.insort_left(nodes, nodeinfo)
+            nodes[fully_qualified_name] = nodeinfo
 
         for param_name in param_names_to_remove:
             self._param_state_machines[param_name].destroy()

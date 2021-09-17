@@ -28,7 +28,7 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 * [ ] Support lifecycle updates on nodes that don't have /transition_events
 * [x] Show if a node is a ComponentNode
 * [ ] Show the nodes that are inside of a ComponentNode
-* [ ] Have the ability to select one or more nodes and hide them (how do we get them back?)
+* [x] Have the ability to select one or more nodes and hide them
 
 ## Topics
 
@@ -40,7 +40,7 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 * [x] Show the Quality-of-Service settings for each topic
 * [ ] Show the rate (hz) at which a topic is publishing data
 * [ ] Show the bandwidth that a topic is using
-* [ ] Have the ability to hide one or more topics on a node (how do we get them back?)
+* [x] Have the ability to hide one or more topics on a node
 * [ ] Gracefully handle topics with unknown topic types
 * [ ] Show the actual data flowing over a topic
 
@@ -52,7 +52,7 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 * [x] Hide default services like /describe_parameters, /get_parameter_types, /get_parameters, /list_parameters, /set_parameters, /set_parameters_atomically by default (with option to turn on)
 * [x] Show the type for each service
 * [ ] Show the Quality-of-Service settings for each service (does this even make sense for a service?)
-* [ ] Have the ability to hide one or more services on a node (how do we get them back?)
+* [x] Have the ability to hide one or more services on a node
 * [ ] Gracefully handle services with unknown topic types
 
 ## Actions
@@ -62,5 +62,5 @@ This utility will show all of the nodes in a graph, all of the topics, services,
 * [x] Draw a line between the action clients and action services in the network
 * [x] Show the type for each action
 * [ ] Show the Quality-of-Service settings for each action (does this even make sense for an action?)
-* [ ] Have the ability to hide one or more actions on a node (how do we get them back?)
+* [x] Have the ability to hide one or more actions on a node
 * [ ] Gracefully handle actions with unknown topic types

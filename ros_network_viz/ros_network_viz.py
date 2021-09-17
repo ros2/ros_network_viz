@@ -631,6 +631,8 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
         self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 
+        self.setWindowTitle('ROS 2 network visualizer')
+
         # Instantiate the scene
         scene = NetworkScene(self)
         # TODO(clalancette): Make this configurable or resizeable somehow?

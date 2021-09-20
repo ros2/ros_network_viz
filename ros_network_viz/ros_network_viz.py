@@ -704,8 +704,6 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def update_parameters(self, node_name):
         if node_name not in self._node_parameters:
-            # TODO(clalancette): This leaks because nodes added to the dict
-            # will never be deleted, even when the node goes away
             self._node_parameters[node_name] = {}
 
         ret = self._ros_network.get_node_parameters(node_name)
@@ -715,8 +713,6 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def update_lifecycle_state(self, node_name):
         if node_name not in self._lifecycle_states:
-            # TODO(clalancette): This leaks because nodes added to the dict
-            # will never be deleted, even when the node goes away
             self._lifecycle_states[node_name] = None
 
         ret = self._ros_network.get_lifecycle_node_state(node_name)
@@ -726,8 +722,6 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def update_component_manager_nodes(self, node_name):
         if node_name not in self._component_manager_nodes:
-            # TODO(clalancette): This leaks because nodes added to the dict
-            # will never be deleted, even when the node goes away
             self._component_manager_nodes[node_name] = []
 
         ret = self._ros_network.get_component_manager_nodes(node_name)
@@ -737,18 +731,36 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
 
     def get_ros_graph_updates(self):
         start = time.time()
+
         node_list = self._ros_network.get_nodes()
 
         if node_list != self._node_list:
             self._node_list = node_list
             self.scene().newNodes.emit(self._node_list)
 
-        for node in self._node_list:
-            self.update_parameters(node.name)
-            if node.is_lifecycle:
-                self.update_lifecycle_state(node.name)
-            if node.is_component_manager:
-                self.update_component_manager_nodes(node.name)
+            parameters_to_remove = set(self._node_parameters.keys())
+            lcs_to_remove = set(self._lifecycle_states.keys())
+            cms_to_remove = set(self._component_manager_nodes.keys())
+
+            for node in self._node_list:
+                self.update_parameters(node.name)
+                if node.is_lifecycle:
+                    self.update_lifecycle_state(node.name)
+                if node.is_component_manager:
+                    self.update_component_manager_nodes(node.name)
+
+                parameters_to_remove.discard(node.name)
+                lcs_to_remove.discard(node.name)
+                cms_to_remove.discard(node.name)
+
+            for name in parameters_to_remove:
+                del self._node_parameters[name]
+
+            for name in lcs_to_remove:
+                del self._lifecycle_states[name]
+
+            for name in cms_to_remove:
+                del self._component_manager_nodes[name]
 
         end = time.time()
         print('Timer took %f seconds' % (end - start))

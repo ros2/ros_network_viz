@@ -649,7 +649,7 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
         # the ROS graph.  Unfortunately the graph APIs are not available in
         # Python, so this is the best we can do for now.
         self._timer = QtCore.QTimer()
-        self._timer.timeout.connect(self.get_new_edges)
+        self._timer.timeout.connect(self.get_ros_graph_updates)
         self._timer.start(500)
 
     # PyQt method override
@@ -735,7 +735,7 @@ class NodeGraphicsView(QtWidgets.QGraphicsView):
             self.scene().newComponentManagerNodes.emit(node_name, ret)
             self._component_manager_nodes[node_name] = list(ret)
 
-    def get_new_edges(self):
+    def get_ros_graph_updates(self):
         start = time.time()
         node_list = self._ros_network.get_nodes()
 

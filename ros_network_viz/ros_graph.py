@@ -274,6 +274,10 @@ class ROSAsyncServiceStateMachine:
     def reset(self):
         self._state = self.NEEDS_CLIENT
 
+    def destroy(self):
+        self._state = self.NEEDS_CLIENT
+        self._rosnode.destroy_client(self._client)
+
 
 class ROSParameterStateMachine:
 
@@ -350,17 +354,23 @@ class ROSParameterStateMachine:
                     # eventually remove it.
                     self._parameters[param.name] = None
 
+    def destroy(self):
+        self._list_state_machine.destroy()
+        self._get_state_machine.destroy()
+
 
 class ROSLifecycleStateMachine:
 
     def __init__(self, rosnode, node_name):
-        # TODO(clalancette): We are never destroying this
-        self._lc_transition_sub = rosnode.create_subscription(lifecycle_msgs.msg.TransitionEvent,
-                                                              node_name + '/transition_event',
-                                                              self.lifecycle_transition_cb,
-                                                              10)
+        self._rosnode = rosnode
 
-        self._lc_state_machine = ROSAsyncServiceStateMachine(rosnode,
+        self._lc_transition_sub = self._rosnode.create_subscription(
+            lifecycle_msgs.msg.TransitionEvent,
+            node_name + '/transition_event',
+            self.lifecycle_transition_cb,
+            10)
+
+        self._lc_state_machine = ROSAsyncServiceStateMachine(self._rosnode,
                                                              node_name,
                                                              lifecycle_msgs.srv.GetState,
                                                              self.create_lifecycle_request,
@@ -384,6 +394,10 @@ class ROSLifecycleStateMachine:
     def lifecycle_transition_cb(self, msg):
         with self._lifecycle_state_lock:
             self._lifecycle_state = msg.goal_state.label
+
+    def destroy(self):
+        self._rosnode.destroy_subscription(self._lc_transition_sub)
+        self._lc_state_machine.destroy()
 
 
 class ROSComponentManagerListNodesStateMachine:
@@ -413,6 +427,9 @@ class ROSComponentManagerListNodesStateMachine:
 
         return self._nodes
 
+    def destroy(self):
+        self._comp_state_machine.destroy()
+
 
 class ROSGraph:
 
@@ -441,6 +458,10 @@ class ROSGraph:
     def get_nodes(self):
         nodes = []
 
+        param_names_to_remove = set(self._param_state_machines.keys())
+        lc_names_to_remove = set(self._lc_state_state_machines.keys())
+        cm_names_to_remove = set(self._cm_nodes_state_machines.keys())
+
         # These two dicts are meant to store
         # (topic_name, node_name) -> TopicEndpointInfo for publishers and
         # subscriptions, respectively.  We store these for performance, so we
@@ -457,6 +478,10 @@ class ROSGraph:
         for name, namespace in self._node.get_node_names_and_namespaces():
             fully_qualified_name = create_node_namespace(name, namespace)
             nodeinfo = ROSNodeInfo(fully_qualified_name)
+
+            param_names_to_remove.discard(fully_qualified_name)
+            lc_names_to_remove.discard(fully_qualified_name)
+            cm_names_to_remove.discard(fully_qualified_name)
 
             try:
                 # Topic publishers
@@ -481,7 +506,7 @@ class ROSGraph:
                     if topic_info_tuple in pub_info_list:
                         topic_info = pub_info_list[topic_info_tuple]
                         nodeinfo.add_topic_publisher(topic_name, topic_info.topic_type,
-                                                    topic_info.qos_profile)
+                                                     topic_info.qos_profile)
                     else:
                         # In this case, we couldn't get info for the topic for
                         # for some reason.  Since we know that the topic is
@@ -524,7 +549,7 @@ class ROSGraph:
                     if topic_info_tuple in sub_info_list:
                         topic_info = sub_info_list[topic_info_tuple]
                         nodeinfo.add_topic_subscriber(topic_name, topic_info.topic_type,
-                                                     topic_info.qos_profile)
+                                                      topic_info.qos_profile)
                     else:
                         # In this case, we couldn't get info for the topic for
                         # for some reason.  Since we know that the topic is
@@ -564,6 +589,18 @@ class ROSGraph:
 
             bisect.insort_left(nodes, nodeinfo)
 
+        for param_name in param_names_to_remove:
+            self._param_state_machines[param_name].destroy()
+            del self._param_state_machines[param_name]
+
+        for lc_name in lc_names_to_remove:
+            self._lc_state_state_machines[lc_name].destroy()
+            del self._lc_state_state_machines[lc_name]
+
+        for cm_name in cm_names_to_remove:
+            self._cm_nodes_state_machines[cm_name].destroy()
+            del self._cm_nodes_state_machines[cm_name]
+
         self._shutting_down_lock.release()
 
         return nodes
@@ -574,8 +611,10 @@ class ROSGraph:
         if not self._shutting_down_lock.acquire(blocking=False):
             return
 
-        if msg.node in self._param_state_machines:
-            self._param_state_machines[msg.node].update_parameters_from_msg(msg)
+        if msg.node not in self._param_state_machines:
+            self._param_state_machines[msg.node] = ROSParameterStateMachine(self._node, msg.node)
+
+        self._param_state_machines[msg.node].update_parameters_from_msg(msg)
 
         self._shutting_down_lock.release()
 

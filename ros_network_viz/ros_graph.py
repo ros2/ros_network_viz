@@ -138,7 +138,7 @@ class ROSConnection:
         return hash(self.conn_name)
 
 
-class ROSNode:
+class ROSNodeInfo:
 
     __slots__ = ('name', 'is_lifecycle', 'is_component_manager', 'topic_publishers',
                  'service_clients', 'action_clients', 'topic_subscribers', 'service_servers',
@@ -456,7 +456,7 @@ class ROSGraph:
 
         for name, namespace in self._node.get_node_names_and_namespaces():
             fully_qualified_name = create_node_namespace(name, namespace)
-            rosnode = ROSNode(fully_qualified_name)
+            nodeinfo = ROSNodeInfo(fully_qualified_name)
 
             try:
                 # Topic publishers
@@ -480,27 +480,27 @@ class ROSGraph:
 
                     if topic_info_tuple in pub_info_list:
                         topic_info = pub_info_list[topic_info_tuple]
-                        rosnode.add_topic_publisher(topic_name, topic_info.topic_type,
+                        nodeinfo.add_topic_publisher(topic_name, topic_info.topic_type,
                                                     topic_info.qos_profile)
                     else:
                         # In this case, we couldn't get info for the topic for
                         # for some reason.  Since we know that the topic is
                         # valid, just insert them without QoS profiles.
                         for topic_type in topic_types:
-                            rosnode.add_topic_publisher(topic_name, topic_info.topic_type, None)
+                            nodeinfo.add_topic_publisher(topic_name, topic_info.topic_type, None)
 
                 # Service clients
                 for service_name, service_types in \
                         self._node.get_client_names_and_types_by_node(name, namespace):
                     for service_type in service_types:
-                        rosnode.add_service_client(service_name, service_type)
+                        nodeinfo.add_service_client(service_name, service_type)
 
                 # Action clients
                 action_clients = rclpy.action.get_action_client_names_and_types_by_node(
                     self._node, name, namespace)
                 for action_name, action_types in action_clients:
                     for action_type in action_types:
-                        rosnode.add_action_client(action_name, action_type)
+                        nodeinfo.add_action_client(action_name, action_type)
 
                 # Topic subscribers
                 for topic_name, topic_types in \
@@ -523,34 +523,34 @@ class ROSGraph:
 
                     if topic_info_tuple in sub_info_list:
                         topic_info = sub_info_list[topic_info_tuple]
-                        rosnode.add_topic_subscriber(topic_name, topic_info.topic_type,
+                        nodeinfo.add_topic_subscriber(topic_name, topic_info.topic_type,
                                                      topic_info.qos_profile)
                     else:
                         # In this case, we couldn't get info for the topic for
                         # for some reason.  Since we know that the topic is
                         # valid, just insert them without QoS profiles.
                         for topic_type in topic_types:
-                            rosnode.add_topic_publisher(topic_name, topic_info.topic_type, None)
+                            nodeinfo.add_topic_publisher(topic_name, topic_info.topic_type, None)
 
                 # Service servers
                 for service_name, service_types in \
                         self._node.get_service_names_and_types_by_node(name, namespace):
                     for service_type in service_types:
-                        rosnode.add_service_server(service_name, service_type)
+                        nodeinfo.add_service_server(service_name, service_type)
                         if 'get_state' in service_name and \
                            service_type == 'lifecycle_msgs/srv/GetState':
-                            rosnode.set_lifecycle(True)
+                            nodeinfo.set_lifecycle(True)
 
                         if 'list_nodes' in service_name and \
                            service_type == 'composition_interfaces/srv/ListNodes':
-                            rosnode.set_component_manager(True)
+                            nodeinfo.set_component_manager(True)
 
                 # Action servers
                 action_servers = rclpy.action.get_action_server_names_and_types_by_node(
                     self._node, name, namespace)
                 for action_name, action_types in action_servers:
                     for action_type in action_types:
-                        rosnode.add_action_server(action_name, action_type)
+                        nodeinfo.add_action_server(action_name, action_type)
 
             except rclpy.node.NodeNameNonExistentError:
                 # It's possible that the node exited between when we saw it
@@ -562,7 +562,7 @@ class ROSGraph:
             # errors from the rclpy API (like RCLError), not crash, and report
             # them somehow to the user
 
-            bisect.insort_left(nodes, rosnode)
+            bisect.insort_left(nodes, nodeinfo)
 
         self._shutting_down_lock.release()
 

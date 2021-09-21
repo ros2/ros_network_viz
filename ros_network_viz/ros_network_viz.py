@@ -191,8 +191,7 @@ class NodeBox(QtWidgets.QGraphicsObject):
                                 self._radius,
                                 self._radius)
 
-        # Now draw the node name (and lifecycle state, if applicable) above the
-        # rectangle
+        # Now draw the node name above the rectangle
         painter.setPen(self._text_pen)
         painter.setFont(self._node_text_font)
 
@@ -567,7 +566,7 @@ class NetworkScene(QtWidgets.QGraphicsScene):
             del self._connections[conn_tuple]
 
         if (added_item or items_to_remove) and \
-           networkx_node_graph.nodes and networkx_node_graph.edges:
+           (networkx_node_graph.nodes or networkx_node_graph.edges):
             # TODO(clalancette): These hard-coded values aren't very good
             pos = networkx.kamada_kawai_layout(networkx_node_graph,
                                                center=(999.0, 999.0),

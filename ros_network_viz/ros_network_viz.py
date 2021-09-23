@@ -122,6 +122,7 @@ class NodeBox(QtWidgets.QGraphicsObject):
         self._is_component_manager = is_component_manager
         self._lifecycle_state = None
         self._params = {}
+        self._param_warnings = ''
         self._managed_nodes = []
 
         self._radius = 10
@@ -207,29 +208,29 @@ class NodeBox(QtWidgets.QGraphicsObject):
         text = ''
 
         if self._lifecycle_state is not None:
-            text += 'Lifecycle state: ' + self._lifecycle_state
+            text += 'Lifecycle state: ' + self._lifecycle_state + '\n'
 
         if self._managed_nodes:
             text += 'Managed Nodes:\n'
             for n in self._managed_nodes:
                 text += '  ' + n + '\n'
-            text = text[:-1]
 
-        if self._params:
-            if text:
-                text += '\n'
-            text += 'Parameters:\n'
+        text += 'Parameters:\n'
+        if self._param_warnings:
+            text += '  <' + self._param_warnings + '>\n'
+        elif self._params:
             for k, v in self._params.items():
                 text += '  ' + k + ' -> ' + str(v) + '\n'
-            text = text[:-1]
+        else:
+            text += '  None\n'
 
-        if not text:
-            text = 'No Parameters'
+        text = text[:-1]
 
         self.setToolTip(text)
 
-    def update_params(self, new_params):
+    def update_params(self, new_params, new_warnings):
         self._params = new_params
+        self._param_warnings = new_warnings
         self.update_tooltip()
 
     def update_lifecycle_state(self, new_state):
@@ -358,7 +359,7 @@ class ConnectionBox(QtWidgets.QGraphicsObject):
 
 class NetworkScene(QtWidgets.QGraphicsScene):
 
-    new_node_params_signal = QtCore.pyqtSignal(str, dict, name='newNodeParams')
+    new_node_params_signal = QtCore.pyqtSignal(str, dict, str, name='newNodeParams')
     new_lifecycle_state_signal = QtCore.pyqtSignal(str, str, name='newLifecycleState')
     new_component_nodes_signal = QtCore.pyqtSignal(str, list, name='newComponentManagerNodes')
 
@@ -624,9 +625,9 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
                 item.update_path(source, target)
 
-    def update_node_params(self, node_name, new_params):
+    def update_node_params(self, node_name, new_params, new_warnings):
         if node_name in self._scene_items:
-            self._scene_items[node_name].update_params(new_params)
+            self._scene_items[node_name].update_params(new_params, new_warnings)
 
     def update_lifecycle_state(self, node_name, new_state):
         if node_name in self._scene_items:
@@ -973,12 +974,12 @@ class MainGrid(QtWidgets.QWidget):
 
     def update_parameters(self, node_name):
         if node_name not in self._node_parameters:
-            self._node_parameters[node_name] = {}
+            self._node_parameters[node_name] = ({}, '')
 
-        ret = self._ros_network.get_node_parameters(node_name)
-        if ret and ret != self._node_parameters[node_name]:
-            self._gv.scene().newNodeParams.emit(node_name, ret)
-            self._node_parameters[node_name] = dict(ret)
+        params, warnings = self._ros_network.get_node_parameters(node_name)
+        if (params or warnings) and (params != self._node_parameters[node_name][0] or warnings != self._node_parameters[node_name][1]):
+            self._gv.scene().newNodeParams.emit(node_name, params, warnings)
+            self._node_parameters[node_name] = (dict(params), warnings)
 
     def update_lifecycle_state(self, node_name):
         if node_name not in self._lifecycle_states:

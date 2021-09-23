@@ -551,6 +551,8 @@ class ROSGraph:
                     nodeinfo.add_topic_subscriber(topic_name, topic_type, None)
 
     def get_service_servers(self, name, namespace, nodeinfo):
+        has_list_parameter = False
+        has_get_parameter = False
         for service_name, service_types in \
                 self._node.get_service_names_and_types_by_node(name, namespace):
             for service_type in service_types:
@@ -562,6 +564,16 @@ class ROSGraph:
                 if 'list_nodes' in service_name and \
                    service_type == 'composition_interfaces/srv/ListNodes':
                     nodeinfo.set_component_manager(True)
+
+                if 'list_parameters' in service_name and \
+                   service_type =='rcl_interfaces/srv/ListParameters':
+                    has_list_parameter = True
+
+                if 'get_parameters' in service_name and \
+                   service_type == 'rcl_interfaces/srv/GetParameters':
+                    has_get_parameter = True
+
+        return has_list_parameter and has_get_parameter
 
     def get_action_servers(self, name, namespace, nodeinfo):
         action_servers = rclpy.action.get_action_server_names_and_types_by_node(
@@ -608,7 +620,7 @@ class ROSGraph:
                 self.get_topic_subscribers(fully_qualified_name, name, namespace,
                                            nodeinfo, sub_info_list)
 
-                self.get_service_servers(name, namespace, nodeinfo)
+                has_param_services = self.get_service_servers(name, namespace, nodeinfo)
 
                 self.get_action_servers(name, namespace, nodeinfo)
 
@@ -621,6 +633,9 @@ class ROSGraph:
             # TODO(clalancette): To be robust, we really should deal with other
             # errors from the rclpy API (like RCLError), not crash, and report
             # them somehow to the user
+
+            if has_param_services and fully_qualified_name not in self._param_state_machines:
+                self._param_state_machines[fully_qualified_name] = ROSParameterStateMachine(self._node, fully_qualified_name)
 
             nodes[fully_qualified_name] = nodeinfo
 
@@ -646,10 +661,19 @@ class ROSGraph:
         if not self._shutting_down_lock.acquire(blocking=False):
             return
 
-        if msg.node not in self._param_state_machines:
-            self._param_state_machines[msg.node] = ROSParameterStateMachine(self._node, msg.node)
-
-        self._param_state_machines[msg.node].update_parameters_from_msg(msg)
+        # We're making a policy decision here; if get_nodes() hasn't
+        # instantiated the state machine, we don't try to do an update.
+        # The main reason for this is to distinguish between the case where
+        # the node has no parameters, and where we can't get the parameters
+        # (because the required services don't exist).  In cases where the
+        # required services don't exist but a parameter is updated via
+        # /parameter_events, we *still* won't add it to the map.  This seems
+        # reasonable, since we don't want to give the user the false impression
+        # that the node only has the parameter(s) that were updated; we want the
+        # user to know that we can't reliably display information about the
+        # parameters.
+        if msg.node in self._param_state_machines:
+            self._param_state_machines[msg.node].update_parameters_from_msg(msg)
 
         self._shutting_down_lock.release()
 
@@ -662,14 +686,16 @@ class ROSGraph:
         if not self._shutting_down_lock.acquire(blocking=False):
             return
 
-        if node_name not in self._param_state_machines:
-            self._param_state_machines[node_name] = ROSParameterStateMachine(self._node, node_name)
+        ret = {}
+        warnings = 'Node does not support showing parameters'
 
-        ret = self._param_state_machines[node_name].step()
+        if node_name in self._param_state_machines:
+            ret = self._param_state_machines[node_name].step()
+            warnings = ''
 
         self._shutting_down_lock.release()
 
-        return ret
+        return ret, warnings
 
     def get_lifecycle_node_state(self, node_name):
         # This method is useful to get the lifecycle state of a Lifecycle node.

@@ -365,10 +365,10 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
     new_nodes_signal = QtCore.pyqtSignal(dict, name='newNodes')
 
-    update_hidden_nodes_signal = QtCore.pyqtSignal(str, bool, name='updateHiddenNodes')
-    update_hidden_topics_signal = QtCore.pyqtSignal(str, bool, name='updateHiddenTopics')
-    update_hidden_services_signal = QtCore.pyqtSignal(str, bool, name='updateHiddenServices')
-    update_hidden_actions_signal = QtCore.pyqtSignal(str, bool, name='updateHiddenActions')
+    update_hidden_nodes_signal = QtCore.pyqtSignal(list, name='updateHiddenNodes')
+    update_hidden_topics_signal = QtCore.pyqtSignal(list, name='updateHiddenTopics')
+    update_hidden_services_signal = QtCore.pyqtSignal(list, name='updateHiddenServices')
+    update_hidden_actions_signal = QtCore.pyqtSignal(list, name='updateHiddenActions')
 
     def create_bool_right_click_action(self, name, boolean_variable, callback):
         action = QtWidgets.QAction(name, self)
@@ -640,42 +640,50 @@ class NetworkScene(QtWidgets.QGraphicsScene):
         if node_name in self._scene_items:
             self._scene_items[node_name].update_managed_nodes(managed_nodes)
 
-    def update_hidden_nodes(self, node_name, is_visible):
+    def update_hidden_nodes(self, node_names):
         before = set(self._hidden_nodes)
-        if is_visible:
-            self._hidden_nodes.discard(node_name)
-        else:
-            self._hidden_nodes.add(node_name)
+
+        for node_name, is_visible in node_names:
+            if is_visible:
+                self._hidden_nodes.discard(node_name)
+            else:
+                self._hidden_nodes.add(node_name)
 
         if before != self._hidden_nodes:
             self.update_nodes(self._graph_nodes_list)
 
-    def update_hidden_topics(self, topic_name, is_visible):
+    def update_hidden_topics(self, topic_names):
         before = set(self._hidden_topics)
-        if is_visible:
-            self._hidden_topics.discard(topic_name)
-        else:
-            self._hidden_topics.add(topic_name)
+
+        for topic_name, is_visible in topic_names:
+            if is_visible:
+                self._hidden_topics.discard(topic_name)
+            else:
+                self._hidden_topics.add(topic_name)
 
         if before != self._hidden_topics:
             self.update_nodes(self._graph_nodes_list)
 
-    def update_hidden_services(self, service_name, is_visible):
+    def update_hidden_services(self, service_names):
         before = set(self._hidden_services)
-        if is_visible:
-            self._hidden_services.discard(service_name)
-        else:
-            self._hidden_services.add(service_name)
+
+        for service_name, is_visible in service_names:
+            if is_visible:
+                self._hidden_services.discard(service_name)
+            else:
+                self._hidden_services.add(service_name)
 
         if before != self._hidden_services:
             self.update_nodes(self._graph_nodes_list)
 
-    def update_hidden_actions(self, action_name, is_visible):
+    def update_hidden_actions(self, action_names):
         before = set(self._hidden_actions)
-        if is_visible:
-            self._hidden_actions.discard(action_name)
-        else:
-            self._hidden_actions.add(action_name)
+
+        for action_name, is_visible in action_names:
+            if is_visible:
+                self._hidden_actions.discard(action_name)
+            else:
+                self._hidden_actions.add(action_name)
 
         if before != self._hidden_actions:
             self.update_nodes(self._graph_nodes_list)
@@ -839,37 +847,46 @@ class MainGrid(QtWidgets.QWidget):
 
     def state_changed(self, item):
         parent = item.parent()
-        item_type = ''
-        if parent is not None:
-            item_type = item.parent().text()
+        if parent is None:
+            item_type = item.text()
+        else:
+            item_type = parent.text()
         item_name = item.text()
         item_state = item.checkState()
+
+        item_list = []
 
         if parent is not None:
             # If the parent is not None, that means this is an individual
             # check-box, and we {en,dis}able just that item
-            if item_type == 'Nodes':
-                self._gv.scene().updateHiddenNodes.emit(item_name,
-                                                        item_state == QtCore.Qt.Checked)
-            elif item_type == 'Topics':
-                self._gv.scene().updateHiddenTopics.emit(item_name,
-                                                         item_state == QtCore.Qt.Checked)
-            elif item_type == 'Services':
-                self._gv.scene().updateHiddenServices.emit(item_name,
-                                                           item_state == QtCore.Qt.Checked)
-            elif item_type == 'Actions':
-                self._gv.scene().updateHiddenActions.emit(item_name,
-                                                          item_state == QtCore.Qt.Checked)
+            item_list.append((item_name, item_state == QtCore.Qt.Checked))
         else:
             # If the parent is None, this is a top-level check-box and we want
             # to {en,dis}able everything
 
-            # Note that we only have to manipulate the checkbox row, as that
-            # will cause another 'state_changed' callback for each item that
-            # will cause it to redraw above
+            is_visible = item_state == QtCore.Qt.Checked
+
             this_row = self._model.invisibleRootItem().child(self._labels_to_rows[item_name])
+            # If we leave the itemChanged signal in place, then Qt emits a
+            # itemChanged signal for *every* item we change the check state for,
+            # which can cause us to do many redraws and hold up the UI.  Instead
+            # we disconnect the signal temporarily, mark all of the check boxes,
+            # and then reenable the signal.  Then below we emit one large change
+            # which is a lot faster.
+            self._model.itemChanged.disconnect(self.state_changed)
             for i in range(0, this_row.rowCount()):
                 this_row.child(i).setCheckState(item_state)
+                item_list.append((this_row.child(i).text(), is_visible))
+            self._model.itemChanged.connect(self.state_changed)
+
+        if item_type == 'Nodes':
+            self._gv.scene().updateHiddenNodes.emit(item_list)
+        elif item_type == 'Topics':
+            self._gv.scene().updateHiddenTopics.emit(item_list)
+        elif item_type == 'Services':
+            self._gv.scene().updateHiddenServices.emit(item_list)
+        elif item_type == 'Actions':
+            self._gv.scene().updateHiddenActions.emit(item_list)
 
     def create_checkable_item(self, name, is_hidden):
         item = QtGui.QStandardItem(name)
@@ -900,7 +917,7 @@ class MainGrid(QtWidgets.QWidget):
                 self._model.invisibleRootItem().child(
                     self._labels_to_rows['Nodes']).insertRow(index, checked_node)
                 if node_is_hidden(name):
-                    self._gv.scene().updateHiddenNodes.emit(name, False)
+                    self._gv.scene().updateHiddenNodes.emit([(name, False)])
             self._node_list[name] = node
 
             for topic in node.topic_publishers + node.topic_subscribers:
@@ -911,7 +928,7 @@ class MainGrid(QtWidgets.QWidget):
                     self._model.invisibleRootItem().child(
                         self._labels_to_rows['Topics']).insertRow(index, checked_topic)
                     if hidden:
-                        self._gv.scene().updateHiddenTopics.emit(topic.conn_name, False)
+                        self._gv.scene().updateHiddenTopics.emit([(topic.conn_name, False)])
 
                 if topic.conn_name in topics_to_remove:
                     topics_to_remove.discard(topic.conn_name)
@@ -924,7 +941,7 @@ class MainGrid(QtWidgets.QWidget):
                     self._model.invisibleRootItem().child(
                         self._labels_to_rows['Services']).insertRow(index, checked_service)
                     if hidden:
-                        self._gv.scene().updateHiddenServices.emit(service.conn_name, False)
+                        self._gv.scene().updateHiddenServices.emit([(service.conn_name, False)])
 
                 if service.conn_name in services_to_remove:
                     services_to_remove.discard(service.conn_name)

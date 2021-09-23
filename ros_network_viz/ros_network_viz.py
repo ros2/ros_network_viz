@@ -474,16 +474,18 @@ class NetworkScene(QtWidgets.QGraphicsScene):
 
             networkx_node_graph.add_node(node.name)
 
-            def update_one_topic(topic):
+            def update_one_topic(node_name, topic, direction):
+                added_topic = False
+
                 # TODO(clalancette): What if there are multiple topics with
                 # different types and/or QoS settings?
                 if topic.conn_name in self._hidden_topics:
                     if topic.conn_name in self._scene_items:
                         self._scene_items[topic.conn_name].setVisible(False)
-                    return False
+                    return added_topic
 
                 if topic.conn_name not in self._scene_items:
-                    added_item = True
+                    added_topic = True
                     new_box = ConnectionBox(topic.conn_name, topic.conn_type, 'topic')
                     self._scene_items[topic.conn_name] = new_box
                     self.addItem(self._scene_items[topic.conn_name])
@@ -493,18 +495,27 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                 if topic.conn_name in items_to_remove:
                     del items_to_remove[topic.conn_name]
 
-                return True
+                if direction == 'node_to_conn':
+                    networkx_node_graph.add_edge(node_name, topic.conn_name)
+                else:
+                    networkx_node_graph.add_edge(topic.conn_name, node_name)
 
-            def update_one_service(service):
+                connection_tuples.append((node_name, topic, direction))
+
+                return added_topic
+
+            def update_one_service(node_name, service, direction):
+                added_service = False
+
                 # TODO(clalancette): What if there are multiple services with
                 # different types and/or QoS settings?
                 if service.conn_name in self._hidden_services:
                     if service.conn_name in self._scene_items:
                         self._scene_items[service.conn_name].setVisible(False)
-                    return False
+                    return added_service
 
                 if service.conn_name not in self._scene_items:
-                    added_item = True
+                    added_service = True
                     new_box = ConnectionBox(service.conn_name, service.conn_type, 'service')
                     self._scene_items[service.conn_name] = new_box
                     self.addItem(self._scene_items[service.conn_name])
@@ -514,16 +525,25 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                 if service.conn_name in items_to_remove:
                     del items_to_remove[service.conn_name]
 
-                return True
+                if direction == 'node_to_conn':
+                    networkx_node_graph.add_edge(node_name, service.conn_name)
+                else:
+                    networkx_node_graph.add_edge(service.conn_name, node_name)
 
-            def update_one_action(action):
+                connection_tuples.append((node_name, service, direction))
+
+                return added_service
+
+            def update_one_action(node_name, action, direction):
+                added_action = False
+
                 if action.conn_name in self._hidden_actions:
                     if action.conn_name in self._scene_items:
                         self._scene_items[action.conn_name].setVisible(False)
-                    return False
+                    return added_action
 
                 if action.conn_name not in self._scene_items:
-                    added_item = True
+                    added_action = True
                     new_box = ConnectionBox(action.conn_name, action.conn_type, 'action')
                     self._scene_items[action.conn_name] = new_box
                     self.addItem(self._scene_items[action.conn_name])
@@ -534,49 +554,32 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                 if action.conn_name in items_to_remove:
                     del items_to_remove[action.conn_name]
 
-                return True
+                if direction == 'node_to_conn':
+                    networkx_node_graph.add_edge(node_name, action.conn_name)
+                else:
+                    networkx_node_graph.add_edge(action.conn_name, node_name)
+
+                connection_tuples.append((node_name, action, direction))
+
+                return added_action
 
             for topic in node.topic_publishers:
-                if not update_one_topic(topic):
-                    continue
-
-                networkx_node_graph.add_edge(node.name, topic.conn_name)
-                connection_tuples.append((node.name, topic, 'node_to_conn'))
+                added_item = update_one_topic(node.name, topic, 'node_to_conn')
 
             for topic in node.topic_subscribers:
-                if not update_one_topic(topic):
-                    continue
-
-                networkx_node_graph.add_edge(topic.conn_name, node.name)
-                connection_tuples.append((node.name, topic, 'conn_to_node'))
+                added_item = update_one_topic(node.name, topic, 'conn_to_node')
 
             for service in node.service_clients:
-                if not update_one_service(service):
-                    continue
-
-                networkx_node_graph.add_edge(node.name, service.conn_name)
-                connection_tuples.append((node.name, service, 'node_to_conn'))
+                added_item = update_one_service(node.name, service, 'node_to_conn')
 
             for service in node.service_servers:
-                if not update_one_service(service):
-                    continue
-
-                networkx_node_graph.add_edge(service.conn_name, node.name)
-                connection_tuples.append((node.name, service, 'conn_to_node'))
+                added_item = update_one_service(node.name, service, 'conn_to_node')
 
             for action in node.action_clients:
-                if not update_one_action(action):
-                    continue
-
-                networkx_node_graph.add_edge(node.name, action.conn_name)
-                connection_tuples.append((node.name, action, 'node_to_conn'))
+                added_item = update_one_action(node.name, action, 'node_to_conn')
 
             for action in node.action_servers:
-                if not update_one_action(action):
-                    continue
-
-                networkx_node_graph.add_edge(action.conn_name, node.name)
-                connection_tuples.append((node.name, action, 'conn_to_node'))
+                added_item = update_one_action(node.name, action, 'conn_to_node')
 
         for name, item in items_to_remove.items():
             if name in self._scene_items:

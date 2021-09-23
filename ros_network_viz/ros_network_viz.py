@@ -794,11 +794,21 @@ class MainGrid(QtWidgets.QWidget):
 
         self._model = QtGui.QStandardItemModel(self)
         self._model.setRowCount(0)
-        self._model.setHorizontalHeaderLabels(['Nodes, Topics, Services, Actions'])
-        self._model.invisibleRootItem().appendRow([self.create_checkable_item('Nodes', False)])
-        self._model.invisibleRootItem().appendRow([self.create_checkable_item('Topics', False)])
-        self._model.invisibleRootItem().appendRow([self.create_checkable_item('Services', False)])
-        self._model.invisibleRootItem().appendRow([self.create_checkable_item('Actions', False)])
+
+        self._labels_to_rows = {
+            'Nodes': 0,
+            'Topics': 1,
+            'Services': 2,
+            'Actions': 3,
+        }
+
+        label = ''
+        for name in self._labels_to_rows.keys():
+            self._model.invisibleRootItem().appendRow([self.create_checkable_item(name, False)])
+            if label:
+                label = label + ', '
+            label = label + name
+        self._model.setHorizontalHeaderLabels([label])
         self._model.itemChanged.connect(self.state_changed)
 
         self._tree = QtWidgets.QTreeView(self)
@@ -851,24 +861,12 @@ class MainGrid(QtWidgets.QWidget):
             # If the parent is None, this is a top-level check-box and we want
             # to {en,dis}able everything
 
-            child_num = None
-
-            if item_name == 'Nodes':
-                child_num = 0
-            elif item_name == 'Topics':
-                child_num = 1
-            elif item_name == 'Services':
-                child_num = 2
-            elif item_name == 'Actions':
-                child_num = 3
-
-            if child_num is not None:
-                # Note that we only have to manipulate the checkbox row, as that
-                # will cause another 'state_changed' callback for each item that
-                # will cause it to redraw above
-                this_row = self._model.invisibleRootItem().child(child_num)
-                for i in range(0, this_row.rowCount()):
-                    this_row.child(i).setCheckState(item_state)
+            # Note that we only have to manipulate the checkbox row, as that
+            # will cause another 'state_changed' callback for each item that
+            # will cause it to redraw above
+            this_row = self._model.invisibleRootItem().child(self._labels_to_rows[item_name])
+            for i in range(0, this_row.rowCount()):
+                this_row.child(i).setCheckState(item_state)
 
     def create_checkable_item(self, name, is_hidden):
         item = QtGui.QStandardItem(name)
@@ -896,7 +894,8 @@ class MainGrid(QtWidgets.QWidget):
             if name not in self._node_list:
                 index = self._node_name_to_row.add(name)
                 checked_node = self.create_checkable_item(name, node_is_hidden(name))
-                self._model.invisibleRootItem().child(0).insertRow(index, checked_node)
+                self._model.invisibleRootItem().child(
+                    self._labels_to_rows['Nodes']).insertRow(index, checked_node)
                 if node_is_hidden(name):
                     self._gv.scene().updateHiddenNodes.emit(name, False)
             self._node_list[name] = node
@@ -906,7 +905,8 @@ class MainGrid(QtWidgets.QWidget):
                     index = self._topic_name_to_row.add(topic.conn_name)
                     hidden = topic_is_hidden(topic.conn_name, topic.conn_type)
                     checked_topic = self.create_checkable_item(topic.conn_name, hidden)
-                    self._model.invisibleRootItem().child(1).insertRow(index, checked_topic)
+                    self._model.invisibleRootItem().child(
+                        self._labels_to_rows['Topics']).insertRow(index, checked_topic)
                     if hidden:
                         self._gv.scene().updateHiddenTopics.emit(topic.conn_name, False)
 
@@ -918,7 +918,8 @@ class MainGrid(QtWidgets.QWidget):
                     index = self._service_name_to_row.add(service.conn_name)
                     hidden = service_is_hidden(service.conn_name, service.conn_type)
                     checked_service = self.create_checkable_item(service.conn_name, hidden)
-                    self._model.invisibleRootItem().child(2).insertRow(index, checked_service)
+                    self._model.invisibleRootItem().child(
+                        self._labels_to_rows['Services']).insertRow(index, checked_service)
                     if hidden:
                         self._gv.scene().updateHiddenServices.emit(service.conn_name, False)
 
@@ -929,7 +930,8 @@ class MainGrid(QtWidgets.QWidget):
                 if action.conn_name not in self._action_name_to_row:
                     index = self._action_name_to_row.add(action.conn_name)
                     checked_action = self.create_checkable_item(action.conn_name, False)
-                    self._model.invisibleRootItem().child(3).insertRow(index, checked_action)
+                    self._model.invisibleRootItem().child(
+                        self._labels_to_rows['Actions']).insertRow(index, checked_action)
 
                 if action.conn_name in actions_to_remove:
                     actions_to_remove.discard(action.conn_name)
@@ -949,25 +951,29 @@ class MainGrid(QtWidgets.QWidget):
 
             if name in self._node_name_to_row:
                 found_row = self._node_name_to_row.index(name)
-                self._model.invisibleRootItem().child(0).removeRow(found_row)
+                child = self._model.invisibleRootItem().child(self._labels_to_rows['Nodes'])
+                child.removeRow(found_row)
                 self._node_name_to_row.discard(name)
 
         for topic in topics_to_remove:
             if topic in self._topic_name_to_row:
                 found_row = self._topic_name_to_row.index(topic)
-                self._model.invisibleRootItem().child(1).removeRow(found_row)
+                child = self._model.invisibleRootItem().child(self._labels_to_rows['Topics'])
+                child.removeRow(found_row)
                 self._topic_name_to_row.discard(topic)
 
         for service in services_to_remove:
             if service in self._service_name_to_row:
                 found_row = self._service_name_to_row.index(service)
-                self._model.invisibleRootItem().child(2).removeRow(found_row)
+                child = self._model.invisibleRootItem().child(self._labels_to_rows['Services'])
+                child.removeRow(found_row)
                 self._service_name_to_row.discard(service)
 
         for action in actions_to_remove:
             if action in self._action_name_to_row:
                 found_row = self._action_name_to_row.index(action)
-                self._model.invisibleRootItem().child(3).removeRow(found_row)
+                child = self._model.invisibleRootItem().child(self._labels_to_rows['Actions'])
+                child.removeRow(found_row)
                 self._action_name_to_row.discard(action)
 
         self._gv.scene().newNodes.emit(self._node_list)
@@ -977,7 +983,8 @@ class MainGrid(QtWidgets.QWidget):
             self._node_parameters[node_name] = ({}, '')
 
         params, warnings = self._ros_network.get_node_parameters(node_name)
-        if (params or warnings) and (params != self._node_parameters[node_name][0] or warnings != self._node_parameters[node_name][1]):
+        if (params and params != self._node_parameters[node_name][0]) or \
+           (warnings and warnings != self._node_parameters[node_name][1]):
             self._gv.scene().newNodeParams.emit(node_name, params, warnings)
             self._node_parameters[node_name] = (dict(params), warnings)
 

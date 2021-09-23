@@ -566,7 +566,7 @@ class ROSGraph:
                     nodeinfo.set_component_manager(True)
 
                 if 'list_parameters' in service_name and \
-                   service_type =='rcl_interfaces/srv/ListParameters':
+                   service_type == 'rcl_interfaces/srv/ListParameters':
                     has_list_parameter = True
 
                 if 'get_parameters' in service_name and \
@@ -635,7 +635,8 @@ class ROSGraph:
             # them somehow to the user
 
             if has_param_services and fully_qualified_name not in self._param_state_machines:
-                self._param_state_machines[fully_qualified_name] = ROSParameterStateMachine(self._node, fully_qualified_name)
+                psm = ROSParameterStateMachine(self._node, fully_qualified_name)
+                self._param_state_machines[fully_qualified_name] = psm
 
             nodes[fully_qualified_name] = nodeinfo
 

@@ -111,19 +111,6 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
         self._current_brush = self._brush
         super().hoverLeaveEvent(event)
 
-    def update_path(self, source_point, target_point):
-        path = QtGui.QPainterPath()
-
-        self._arrow_location = target_point
-        path.moveTo(source_point)
-        dx = (target_point.x() - source_point.x()) * 0.5
-        dy = target_point.y() - source_point.y()
-        ctrl1 = QtCore.QPointF(source_point.x() + dx, source_point.y() + dy * 0)
-        ctrl2 = QtCore.QPointF(source_point.x() + dx, source_point.y() + dy * 1)
-        path.cubicTo(ctrl1, ctrl2, target_point)
-
-        self.setPath(path)
-
     # PyQt method override
     def paint(self, painter, option, widget):
         super().paint(painter, option, widget)
@@ -138,6 +125,19 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
             path.lineTo(x + 1, y)
             path.moveTo(x - 15, y + 10)
             painter.fillPath(path, self._current_brush)
+
+    def update_path(self, source_point, target_point):
+        path = QtGui.QPainterPath()
+
+        self._arrow_location = target_point
+        path.moveTo(source_point)
+        dx = (target_point.x() - source_point.x()) * 0.5
+        dy = target_point.y() - source_point.y()
+        ctrl1 = QtCore.QPointF(source_point.x() + dx, source_point.y() + dy * 0)
+        ctrl2 = QtCore.QPointF(source_point.x() + dx, source_point.y() + dy * 1)
+        path.cubicTo(ctrl1, ctrl2, target_point)
+
+        self.setPath(path)
 
 
 class NodeBox(QtWidgets.QGraphicsObject):

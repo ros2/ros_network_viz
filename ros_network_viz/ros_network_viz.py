@@ -94,7 +94,6 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
         self.setPen(self._pen)
 
         # The connection line begins in the unselected state
-        self._selected = False
         self._current_brush = self._brush
 
         # The endpoints of the connection line aren't known until update_path is called
@@ -104,14 +103,12 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
     def hoverEnterEvent(self, event):
         self.setPen(self._pen_sel)
         self._current_brush = self._brush_sel
-        self._selected = True
         super().hoverEnterEvent(event)
 
     # PyQt method override
     def hoverLeaveEvent(self, event):
         self.setPen(self._pen)
         self._current_brush = self._brush
-        self._selected = False
         super().hoverLeaveEvent(event)
 
     def update_path(self, source_point, target_point):

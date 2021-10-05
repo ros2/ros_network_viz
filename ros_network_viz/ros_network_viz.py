@@ -82,26 +82,42 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
             ])
             self.setToolTip(text)
 
+        # Pens used to draw the connection line in selected and unselected states
         self._pen = QtGui.QPen(convert_hex_to_color(COLOR_PALETTE['connection_line']), 3)
-
         self._pen_sel = QtGui.QPen(
             convert_hex_to_color(COLOR_PALETTE['connection_line_highlight']), 5)
 
+        # Brushes used to fill the arrow in selected and unselected states
+        self._brush = QtGui.QBrush(convert_hex_to_color(COLOR_PALETTE['connection_line']))
+        self._brush_sel = QtGui.QBrush(convert_hex_to_color(COLOR_PALETTE['connection_line_highlight']))
+
         self.setPen(self._pen)
+
+        # The connection line begins in the unselected state
+        self._selected = False
+        self._current_brush = self._brush
+
+        # The endpoints of the connection line aren't known until update_path is called
+        self._arrow_location = None
 
     # PyQt method override
     def hoverEnterEvent(self, event):
         self.setPen(self._pen_sel)
+        self._current_brush = self._brush_sel
+        self._selected = True
         super().hoverEnterEvent(event)
 
     # PyQt method override
     def hoverLeaveEvent(self, event):
         self.setPen(self._pen)
+        self._current_brush = self._brush
+        self._selected = False
         super().hoverLeaveEvent(event)
 
     def update_path(self, source_point, target_point):
         path = QtGui.QPainterPath()
 
+        self._arrow_location = target_point
         path.moveTo(source_point)
         dx = (target_point.x() - source_point.x()) * 0.5
         dy = target_point.y() - source_point.y()
@@ -110,6 +126,21 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
         path.cubicTo(ctrl1, ctrl2, target_point)
 
         self.setPath(path)
+
+    # PyQt method override
+    def paint(self, painter, option, widget):
+        super().paint(painter, option, widget)
+
+        # update_path() may not have been called yet
+        if self._arrow_location:
+            x = self._arrow_location.x()
+            y = self._arrow_location.y()
+            path = QtGui.QPainterPath()
+            path.moveTo(x - 15, y + 10)
+            path.lineTo(x - 15, y - 10)
+            path.lineTo(x + 1, y)
+            path.moveTo(x - 15, y + 10)
+            painter.fillPath(path, self._current_brush)
 
 
 class NodeBox(QtWidgets.QGraphicsObject):
@@ -623,8 +654,8 @@ class NetworkScene(QtWidgets.QGraphicsScene):
                     source = self._scene_items[node_name].right()
                     target = self._scene_items[conn.conn_name].left()
                 else:
-                    source = self._scene_items[node_name].left()
-                    target = self._scene_items[conn.conn_name].right()
+                    source = self._scene_items[conn.conn_name].right()
+                    target = self._scene_items[node_name].left()
 
                 item.update_path(source, target)
 

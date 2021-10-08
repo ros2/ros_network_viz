@@ -22,6 +22,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 
 from ros_network_viz.ros_graph import node_is_hidden, ROSGraph, service_is_hidden, topic_is_hidden
 from ros_network_viz.sorted_ordered_set import SortedOrderedSet
+from ros_network_viz.config import config
 
 # Most of the colors in this palette are from
 # https://coolors.co/001219-005f73-0a9396-94d2bd-e9d8a6-ee9b00-ca6702-bb3e03-ae2012-9b2226
@@ -797,7 +798,7 @@ class MainGrid(QtWidgets.QWidget):
         self._service_name_to_row = SortedOrderedSet()
         self._action_name_to_row = SortedOrderedSet()
 
-        self.setWindowTitle('ROS 2 network visualizer')
+        self.setWindowTitle('ROS 2 Network Visualizer')
 
         self._splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
 
@@ -824,12 +825,14 @@ class MainGrid(QtWidgets.QWidget):
 
         self._tree = QtWidgets.QTreeView(self)
         self._tree.setModel(self._model)
+        self._tree.setAlternatingRowColors(True)
         self._tree.expandAll()
 
         self._splitter.addWidget(self._gv)
         self._splitter.addWidget(self._tree)
 
         self._hlayout = QtWidgets.QHBoxLayout()
+        self._hlayout.setContentsMargins(0, 0, 0, 0)
         self._hlayout.addWidget(self._splitter)
 
         self.setLayout(self._hlayout)
@@ -895,6 +898,18 @@ class MainGrid(QtWidgets.QWidget):
             item.setCheckState(QtCore.Qt.Checked)
         return item
 
+    def clear_nodes(self):
+        item = self._model.invisibleRootItem().child(0)
+        item.removeRows(0, item.rowCount())
+        self._node_list = {}
+        self._node_name_to_row = SortedOrderedSet()
+        self.update_nodes()
+
+    def clear_services(self):
+        item = self._model.invisibleRootItem().child(2)
+        item.removeRows(0, item.rowCount())
+        self._service_name_to_row = SortedOrderedSet()
+
     def update_nodes(self):
         node_list = self._ros_network.get_nodes()
 
@@ -912,36 +927,65 @@ class MainGrid(QtWidgets.QWidget):
 
         for name, node in node_list.items():
             if name not in self._node_list:
-                index = self._node_name_to_row.add(name)
-                checked_node = self.create_checkable_item(name, node_is_hidden(name))
-                self._model.invisibleRootItem().child(
-                    self._labels_to_rows['Nodes']).insertRow(index, checked_node)
-                if node_is_hidden(name):
-                    self._gv.scene().updateHiddenNodes.emit([(name, False)])
-            self._node_list[name] = node
+                hidden = node_is_hidden(name)
+                if config.list_hidden_nodes:
+                    index = self._node_name_to_row.add(name)
+                    checked_node = self.create_checkable_item(name, hidden)
+                    self._model.invisibleRootItem().child(
+                        self._labels_to_rows['Nodes']).insertRow(index, checked_node)
+                    if node_is_hidden(name):
+                        self._gv.scene().updateHiddenNodes.emit([(name, False)])
+                else:
+                    if hidden:
+                        #self._gv.scene().updateHiddenNodes.emit([(name, False)])
+                        continue
+                    else:
+                        index = self._node_name_to_row.add(name)
+                        checked_node = self.create_checkable_item(name, hidden)
+                        self._model.invisibleRootItem().child(
+                            self._labels_to_rows['Nodes']).insertRow(index, checked_node)
+                self._node_list[name] = node
 
             for topic in node.topic_publishers + node.topic_subscribers:
                 if topic.conn_name not in self._topic_name_to_row:
-                    index = self._topic_name_to_row.add(topic.conn_name)
                     hidden = topic_is_hidden(topic.conn_name, topic.conn_type)
-                    checked_topic = self.create_checkable_item(topic.conn_name, hidden)
-                    self._model.invisibleRootItem().child(
-                        self._labels_to_rows['Topics']).insertRow(index, checked_topic)
-                    if hidden:
-                        self._gv.scene().updateHiddenTopics.emit([(topic.conn_name, False)])
+                    if config.list_hidden_topics:
+                        index = self._topic_name_to_row.add(topic.conn_name)
+                        checked_topic = self.create_checkable_item(topic.conn_name, hidden)
+                        self._model.invisibleRootItem().child(
+                            self._labels_to_rows['Topics']).insertRow(index, checked_topic)
+                        if hidden:
+                            self._gv.scene().updateHiddenTopics.emit([(topic.conn_name, False)])
+                    else:
+                        if hidden:
+                            self._gv.scene().updateHiddenTopics.emit([(topic.conn_name, False)])
+                        else:
+                            index = self._topic_name_to_row.add(topic.conn_name)
+                            checked_topic = self.create_checkable_item(topic.conn_name, hidden)
+                            self._model.invisibleRootItem().child(
+                                self._labels_to_rows['Topics']).insertRow(index, checked_topic)
 
                 if topic.conn_name in topics_to_remove:
                     topics_to_remove.discard(topic.conn_name)
 
             for service in node.service_clients + node.service_servers:
                 if service.conn_name not in self._service_name_to_row:
-                    index = self._service_name_to_row.add(service.conn_name)
                     hidden = service_is_hidden(service.conn_name, service.conn_type)
-                    checked_service = self.create_checkable_item(service.conn_name, hidden)
-                    self._model.invisibleRootItem().child(
-                        self._labels_to_rows['Services']).insertRow(index, checked_service)
-                    if hidden:
-                        self._gv.scene().updateHiddenServices.emit([(service.conn_name, False)])
+                    if config.list_hidden_services:
+                        index = self._service_name_to_row.add(service.conn_name)
+                        checked_service = self.create_checkable_item(service.conn_name, hidden)
+                        self._model.invisibleRootItem().child(
+                            self._labels_to_rows['Services']).insertRow(index, checked_service)
+                        if hidden:
+                            self._gv.scene().updateHiddenServices.emit([(service.conn_name, False)])
+                    else:
+                        if hidden:
+                            self._gv.scene().updateHiddenServices.emit([(service.conn_name, False)])
+                        else:
+                            index = self._service_name_to_row.add(service.conn_name)
+                            checked_service = self.create_checkable_item(service.conn_name, hidden)
+                            self._model.invisibleRootItem().child(
+                                self._labels_to_rows['Services']).insertRow(index, checked_service)
 
                 if service.conn_name in services_to_remove:
                     services_to_remove.discard(service.conn_name)
@@ -1045,7 +1089,82 @@ class MainGrid(QtWidgets.QWidget):
                 self.update_component_manager_nodes(name)
 
         end = time.time()
-        print('Timer took %f seconds' % (end - start))
+        #print('Timer took %f seconds' % (end - start))
+
+
+styleSheet = """
+QTreeView {
+    alternate-background-color: #f6fafb;
+    background: #eeeeee;
+}
+"""
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle('ROS 2 Network Visualizer')
+        self.setStyleSheet(styleSheet)
+
+        menu_bar = self.menuBar()
+
+        fileMenu = menu_bar.addMenu('&File')
+        editMenu = menu_bar.addMenu('&Edit')
+        viewMenu = menu_bar.addMenu('&View')
+        helpMenu = menu_bar.addMenu('&Help')
+
+        exitAction = QtWidgets.QAction('E&xit', self)
+        exitAction.triggered.connect(QtWidgets.qApp.quit)
+
+        listHiddenNodes = QtWidgets.QAction('Hidden nodes', viewMenu, checkable=True, triggered=self.toggle_list_hidden_nodes)
+        listHiddenTopics = QtWidgets.QAction('Hidden topics', viewMenu, checkable=True)
+        listCommonROSTopics = QtWidgets.QAction('Common ROS topics', viewMenu, checkable=True)
+        listLifecycleTopics = QtWidgets.QAction('Lifecycle topics', viewMenu, checkable=True)
+        listHiddenServices = QtWidgets.QAction('Hidden services', viewMenu, checkable=True)
+        listParameterServices = QtWidgets.QAction('Parameter services', viewMenu, checkable=True, triggered=self.toggle_list_parameter_services)
+        listLifecycleServices = QtWidgets.QAction('Lifecycle services', viewMenu, checkable=True)
+
+        viewMenu.addAction(listHiddenNodes)
+        viewMenu.addSeparator()
+        viewMenu.addAction(listHiddenTopics)
+        viewMenu.addAction(listCommonROSTopics)
+        viewMenu.addAction(listLifecycleTopics)
+        viewMenu.addSeparator()
+        viewMenu.addAction(listHiddenServices)
+        viewMenu.addAction(listParameterServices)
+        viewMenu.addAction(listLifecycleServices)
+
+        ros_network = ROSGraph()
+        self._grid = MainGrid(ros_network)
+        self.setCentralWidget(self._grid)
+
+    def toggle_list_hidden_nodes(self):
+        config.list_hidden_nodes = not config.list_hidden_nodes
+        self._grid.clear_nodes()
+
+    def toggle_list_hidden_topics(self):
+        config.list_hidden_topics = not config.list_hidden_topics
+
+    def toggle_list_common_ros_topics(self):
+        pass
+
+    def toggle_list_lifecyle_topics(self):
+        pass
+
+    def toggle_list_hidden_services(self):
+        config.list_hidden_services = not config.list_hidden_services
+        self._grid.clear_services()
+        self._grid.clear_nodes()
+
+    def toggle_list_parameter_services(self):
+        config.list_parameter_services = not config.list_parameter_services
+        self._grid.clear_services()
+        self._grid.clear_nodes()
+
+    def toggle_list_lifecycle_services(self):
+        config.list_lifecycle_services = not config.list_lifecycle_services
+        self._grid.clear_services()
+        self._grid.clear_nodes()
 
 
 # TODO(clalancette): We currently rely on /parameter_events to get updates about
@@ -1054,9 +1173,6 @@ class MainGrid(QtWidgets.QWidget):
 
 # TODO(clalancette): It sure would be nice if the connections animated along
 # with everything else.
-
-# TODO(clalancette): It would be nice if there was an arrow or other indication
-# on whether a connection is a publication, subscription, etc.
 
 # TODO(clalancette): On large graphs, the redraw update can take a long time.
 # What's going on with that?
@@ -1072,10 +1188,12 @@ def main():
         app.quit()
     signal.signal(signal.SIGINT, do_shutdown)
 
-    ros_network = ROSGraph()
+    #ros_network = ROSGraph()
+    #grid = MainGrid(ros_network)
+    #grid.show()
 
-    grid = MainGrid(ros_network)
-    grid.show()
+    window = MainWindow()
+    window.show()
 
     return app.exec_()
 

@@ -26,17 +26,18 @@ import rclpy.action
 import rclpy.node
 from rclpy.topic_endpoint_info import TopicEndpointTypeEnum
 import rclpy.topic_or_service_is_hidden
+from ros_network_viz.config import config
 
-IGNORED_TOPICS = (
+IGNORED_ROS_TOPICS = (
     ('/parameter_events', 'rcl_interfaces/msg/ParameterEvent'),
     ('/rosout', 'rcl_interfaces/msg/Log'),
 )
 
-LIFECYCLE_IGNORED_TOPICS = (
+IGNORED_LIFECYCLE_TOPICS = (
     ('/transition_event', 'lifecycle_msgs/msg/TransitionEvent'),
 )
 
-IGNORED_SERVICES = (
+IGNORED_PARAMETER_SERVICES = (
     ('/describe_parameters', 'rcl_interfaces/srv/DescribeParameters'),
     ('/get_parameter_types', 'rcl_interfaces/srv/GetParameterTypes'),
     ('/get_parameters', 'rcl_interfaces/srv/GetParameters'),
@@ -45,7 +46,7 @@ IGNORED_SERVICES = (
     ('/set_parameters_atomically', 'rcl_interfaces/srv/SetParametersAtomically'),
 )
 
-LIFECYCLE_IGNORED_SERVICES = (
+IGNORED_LIFECYCLE_SERVICES = (
     ('/change_state', 'lifecycle_msgs/srv/ChangeState'),
     ('/get_available_states', 'lifecycle_msgs/srv/GetAvailableStates'),
     ('/get_available_transitions', 'lifecycle_msgs/srv/GetAvailableTransitions'),
@@ -65,11 +66,11 @@ def topic_is_hidden(name, topic_type):
 
     # But then also look through our hard-coded list to skip common topics
     # that don't start with an underscore
-    for ignore_topic, ignore_type in IGNORED_TOPICS:
+    for ignore_topic, ignore_type in IGNORED_ROS_TOPICS:
         if name.startswith(ignore_topic) and ignore_type == topic_type:
             return True
 
-    for ignore_topic, ignore_type in LIFECYCLE_IGNORED_TOPICS:
+    for ignore_topic, ignore_type in IGNORED_LIFECYCLE_TOPICS:
         if name.endswith(ignore_topic) and ignore_type == topic_type:
             return True
 
@@ -77,15 +78,28 @@ def topic_is_hidden(name, topic_type):
 
 
 def service_is_hidden(name, service_type):
-    # First check if rclpy considers this a hidden service
-    if rclpy.topic_or_service_is_hidden.topic_or_service_is_hidden(name):
-        return True
-
-    # But then also look through our hard-coded list to skip common services
-    # that don't start with an underscore
-    for ignore_service, ignore_type in IGNORED_SERVICES + LIFECYCLE_IGNORED_SERVICES:
-        if name.endswith(ignore_service) and ignore_type == service_type:
+    # Check whether we should display hidden services or not
+    if not config.list_hidden_services:
+        # Check if rclpy considers this a hidden service
+        if rclpy.topic_or_service_is_hidden.topic_or_service_is_hidden(name):
             return True
+
+    # Also look through our hard-coded lists to skip common groups of services
+    # that don't start with an underscore, but may not be of interest to the user
+    services_to_check = ()
+
+    # print(f'service_is_hidden: list_parameter_services: {config.list_parameter_services}')
+
+    if not config.list_parameter_services:
+      services_to_check += IGNORED_PARAMETER_SERVICES
+
+    if not config.list_lifecycle_services:
+      services_to_check += IGNORED_LIFECYCLE_SERVICES
+
+    if len(services_to_check):
+        for ignore_service, ignore_type in services_to_check:
+            if name.endswith(ignore_service) and ignore_type == service_type:
+                return True
 
     return False
 

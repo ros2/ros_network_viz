@@ -3,6 +3,16 @@
 This is a utility to visualize the state of an entire ROS 2 network in a graphical way.
 This utility will show all of the nodes in a graph, all of the topics, services, and actions that connect them, as well as some additional metadata about them.
 
+ # Install
+ 
+ ``git clone https://github.com/ros2/ros_network_viz.git``
+ 
+``colcon build --packages-up-to ros_network_vis``
+
+``. install/setup.bash``
+
+ ``ros2 run ros_network_vis ros_network_vis``
+
 # Features
 
 * [ ] Show a legend/help for describing what everything does

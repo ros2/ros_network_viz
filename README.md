@@ -9,7 +9,7 @@ This utility will show all of the nodes in a graph, all of the topics, services,
  git clone https://github.com/ros2/ros_network_viz.git
  colcon build --packages-up-to ros_network_vis
  . install/setup.bash
- ros2 run ros_network_vis ros_network_vis
+ ros2 run ros_network_viz ros_network_viz
  ```
 
 # Features

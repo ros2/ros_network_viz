@@ -3,6 +3,19 @@
 This is a utility to visualize the state of an entire ROS 2 network in a graphical way.
 This utility will show all of the nodes in a graph, all of the topics, services, and actions that connect them, as well as some additional metadata about them.
 
+ # Install
+ 
+ ```bash
+ pip install PyQt5 networkx
+ mkdir -p viz_ws/src
+ cd viz_ws/src
+ git clone https://github.com/ros2/ros_network_viz.git
+ cd ..
+ colcon build --symlink-install
+ . install/setup.bash
+ ros2 run ros_network_viz ros_network_viz
+ ```
+
 # Features
 
 * [ ] Show a legend/help for describing what everything does

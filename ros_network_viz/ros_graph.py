@@ -43,6 +43,7 @@ IGNORED_SERVICES = (
     ('/list_parameters', 'rcl_interfaces/srv/ListParameters'),
     ('/set_parameters', 'rcl_interfaces/srv/SetParameters'),
     ('/set_parameters_atomically', 'rcl_interfaces/srv/SetParametersAtomically'),
+    ('/get_type_description', 'type_description_interfaces/srv/GetTypeDescription'),
 )
 
 LIFECYCLE_IGNORED_SERVICES = (

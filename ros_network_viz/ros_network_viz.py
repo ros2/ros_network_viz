@@ -1073,7 +1073,6 @@ class MainGrid(QtWidgets.QWidget):
                 self.update_component_manager_nodes(name)
 
         end = time.time()
-        print('Timer took %f seconds' % (end - start))
 
 
 # TODO(clalancette): We currently rely on /parameter_events to get updates about

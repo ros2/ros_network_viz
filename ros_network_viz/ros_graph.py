@@ -745,6 +745,15 @@ class ROSGraph:
     def shutdown(self):
         self._shutting_down_lock.acquire()
         self._node.destroy_subscription(self._param_events_sub)
+        for param_name in self._param_state_machines.keys():
+            self._param_state_machines[param_name].destroy()
+
+        for lc_name in self._lc_state_state_machines.keys():
+            self._lc_state_state_machines[lc_name].destroy()
+
+        for cm_name in self._cm_nodes_state_machines.keys():
+            self._cm_nodes_state_machines[cm_name].destroy()
+
         self._node.destroy_node()
         self._executor.shutdown()
         self._spin_thread.join()

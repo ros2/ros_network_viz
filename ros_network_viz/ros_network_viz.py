@@ -14,7 +14,6 @@
 
 import signal
 import sys
-import time
 
 import networkx
 
@@ -72,7 +71,7 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
 
         if qos_profile is not None:
             text = '\n'.join([
-                f'Quality of Service:',
+                'Quality of Service:',
                 f'  Reliability: {qos_profile.reliability.name}',
                 f'  Durability: {qos_profile.durability.name}',
                 f'  Lifespan: {qos_profile.lifespan}',
@@ -89,7 +88,8 @@ class ConnectionLine(QtWidgets.QGraphicsPathItem):
 
         # Brushes used to fill the arrow in selected and unselected states
         self._brush = QtGui.QBrush(convert_hex_to_color(COLOR_PALETTE['connection_line']))
-        self._brush_sel = QtGui.QBrush(convert_hex_to_color(COLOR_PALETTE['connection_line_highlight']))
+        highlight_color = convert_hex_to_color(COLOR_PALETTE['connection_line_highlight'])
+        self._brush_sel = QtGui.QBrush(highlight_color)
 
         self.setPen(self._pen)
 
@@ -1055,8 +1055,6 @@ class MainGrid(QtWidgets.QWidget):
             self._component_manager_nodes[node_name] = list(ret)
 
     def get_ros_graph_updates(self):
-        start = time.time()
-
         self.update_nodes()
 
         # TODO(clalancette): We need to do this every time we update so that
@@ -1071,8 +1069,6 @@ class MainGrid(QtWidgets.QWidget):
                 self.update_lifecycle_state(name)
             if node.is_component_manager:
                 self.update_component_manager_nodes(name)
-
-        end = time.time()
 
 
 # TODO(clalancette): We currently rely on /parameter_events to get updates about

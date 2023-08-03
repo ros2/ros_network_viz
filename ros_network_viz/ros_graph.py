@@ -460,8 +460,8 @@ class ROSGraph:
         self._spin_thread = threading.Thread(target=self._executor.spin)
         self._spin_thread.start()
 
-    def get_topic_publishers(self, fully_qualified_name, name, namespace,
-                             nodeinfo, pub_info_list):
+    def get_topic_publishers(self, name, namespace, pub_info_list):
+        fully_qualified_name = create_node_namespace(name, namespace)
 
         for topic_name, topic_types in \
                 self._node.get_publisher_names_and_types_by_node(name, namespace):
@@ -488,32 +488,30 @@ class ROSGraph:
                         if this_tuple == topic_info_tuple:
                             topic_info = info
 
+                yield_type = topic_type
+                qos_profile = None
                 if topic_info is not None:
-                    nodeinfo.add_topic_publisher(topic_name,
-                                                 topic_info.topic_type,
-                                                 topic_info.qos_profile)
+                    yield_type = topic_info.topic_type
+                    qos_profile = topic_info.qos_profile
 
-                else:
-                    # We couldn't get info for the topic for some reason.  Since
-                    # we know that the topic is valid, insert it without a QoS
-                    # profile.
-                    nodeinfo.add_topic_publisher(topic_name, topic_type, None)
+                yield topic_name, yield_type, qos_profile
 
-    def get_service_clients(self, name, namespace, nodeinfo):
+    def get_service_clients(self, name, namespace):
         for service_name, service_types in \
                 self._node.get_client_names_and_types_by_node(name, namespace):
             for service_type in service_types:
-                nodeinfo.add_service_client(service_name, service_type)
+                yield service_name, service_type
 
-    def get_action_clients(self, name, namespace, nodeinfo):
+    def get_action_clients(self, name, namespace):
         action_clients = rclpy.action.get_action_client_names_and_types_by_node(
             self._node, name, namespace)
         for action_name, action_types in action_clients:
             for action_type in action_types:
-                nodeinfo.add_action_client(action_name, action_type)
+                yield action_name, action_type
 
-    def get_topic_subscribers(self, fully_qualified_name, name, namespace,
-                              nodeinfo, sub_info_list):
+    def get_topic_subscribers(self, name, namespace, sub_info_list):
+        fully_qualified_name = create_node_namespace(name, namespace)
+
         for topic_name, topic_types in \
                 self._node.get_subscriber_names_and_types_by_node(name, namespace):
 
@@ -540,48 +538,26 @@ class ROSGraph:
                         if this_tuple == topic_info_tuple:
                             topic_info = info
 
+                yield_type = topic_type
+                qos_profile = None
                 if topic_info is not None:
-                    nodeinfo.add_topic_subscriber(topic_name,
-                                                  topic_info.topic_type,
-                                                  topic_info.qos_profile)
+                    yield_type = topic_info.topic_type
+                    qos_profile = topic_info.qos_profile
 
-                else:
-                    # We couldn't get info for the topic for some reason.  Since
-                    # we know that the topic is valid, insert it without a QoS
-                    # profile.
-                    nodeinfo.add_topic_subscriber(topic_name, topic_type, None)
+                yield topic_name, yield_type, qos_profile
 
-    def get_service_servers(self, name, namespace, nodeinfo):
-        has_list_parameter = False
-        has_get_parameter = False
+    def get_service_servers(self, name, namespace):
         for service_name, service_types in \
                 self._node.get_service_names_and_types_by_node(name, namespace):
             for service_type in service_types:
-                nodeinfo.add_service_server(service_name, service_type)
-                if 'get_state' in service_name and \
-                   service_type == 'lifecycle_msgs/srv/GetState':
-                    nodeinfo.set_lifecycle(True)
+                yield service_name, service_type
 
-                if 'list_nodes' in service_name and \
-                   service_type == 'composition_interfaces/srv/ListNodes':
-                    nodeinfo.set_component_manager(True)
-
-                if 'list_parameters' in service_name and \
-                   service_type == 'rcl_interfaces/srv/ListParameters':
-                    has_list_parameter = True
-
-                if 'get_parameters' in service_name and \
-                   service_type == 'rcl_interfaces/srv/GetParameters':
-                    has_get_parameter = True
-
-        return has_list_parameter and has_get_parameter
-
-    def get_action_servers(self, name, namespace, nodeinfo):
+    def get_action_servers(self, name, namespace):
         action_servers = rclpy.action.get_action_server_names_and_types_by_node(
             self._node, name, namespace)
         for action_name, action_types in action_servers:
             for action_type in action_types:
-                nodeinfo.add_action_server(action_name, action_type)
+                yield action_name, action_type
 
     def get_nodes(self):
         nodes = {}
@@ -598,7 +574,7 @@ class ROSGraph:
         # These two dicts store (node_name, topic_name, topic_type) -> TopicEndpointInfo
         # for publishers and subscribers, respectively.  We store these for
         # performance, so we aren't iterating over the topic info over and over
-        # again when a topic apperars in multiple nodes.
+        # again when a topic appears in multiple nodes.
         pub_info_list = {}
         sub_info_list = {}
 
@@ -611,19 +587,42 @@ class ROSGraph:
             cm_names_to_remove.discard(fully_qualified_name)
 
             try:
-                self.get_topic_publishers(fully_qualified_name, name, namespace,
-                                          nodeinfo, pub_info_list)
+                for topic_name, topic_type, topic_qos in \
+                   self.get_topic_publishers(name, namespace, pub_info_list):
+                    nodeinfo.add_topic_publisher(topic_name, topic_type, topic_qos)
 
-                self.get_service_clients(name, namespace, nodeinfo)
+                for service_name, service_type in self.get_service_clients(name, namespace):
+                    nodeinfo.add_service_client(service_name, service_type)
 
-                self.get_action_clients(name, namespace, nodeinfo)
+                for action_name, action_type in self.get_action_clients(name, namespace):
+                    nodeinfo.add_action_client(action_name, action_type)
 
-                self.get_topic_subscribers(fully_qualified_name, name, namespace,
-                                           nodeinfo, sub_info_list)
+                for topic_name, topic_type, topic_qos in \
+                   self.get_topic_subscribers(name, namespace, sub_info_list):
+                    nodeinfo.add_topic_subscriber(topic_name, topic_type, topic_qos)
 
-                has_param_services = self.get_service_servers(name, namespace, nodeinfo)
+                has_list_parameter = False
+                has_get_parameter = False
+                for service_name, service_type in self.get_service_servers(name, namespace):
+                    nodeinfo.add_service_server(service_name, service_type)
+                    if 'get_state' in service_name and \
+                       service_type == 'lifecycle_msgs/srv/GetState':
+                        nodeinfo.set_lifecycle(True)
 
-                self.get_action_servers(name, namespace, nodeinfo)
+                    if 'list_nodes' in service_name and \
+                       service_type == 'composition_interfaces/srv/ListNodes':
+                        nodeinfo.set_component_manager(True)
+
+                    if 'list_parameters' in service_name and \
+                       service_type == 'rcl_interfaces/srv/ListParameters':
+                        has_list_parameter = True
+
+                    if 'get_parameters' in service_name and \
+                       service_type == 'rcl_interfaces/srv/GetParameters':
+                        has_get_parameter = True
+
+                for action_name, action_type in self.get_action_servers(name, namespace):
+                    nodeinfo.add_action_server(action_name, action_type)
 
             except rclpy.node.NodeNameNonExistentError:
                 # It's possible that the node exited between when we saw it
@@ -635,6 +634,7 @@ class ROSGraph:
             # errors from the rclpy API (like RCLError), not crash, and report
             # them somehow to the user
 
+            has_param_services = has_list_parameter and has_get_parameter
             if has_param_services and fully_qualified_name not in self._param_state_machines:
                 psm = ROSParameterStateMachine(self._node, fully_qualified_name)
                 self._param_state_machines[fully_qualified_name] = psm

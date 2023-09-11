@@ -6,11 +6,11 @@ This utility will show all of the nodes in a graph, all of the topics, services,
  # Install
  
  ```bash
- pip install PyQt5 networkx
  mkdir -p viz_ws/src
  cd viz_ws/src
  git clone https://github.com/ros2/ros_network_viz.git
  cd ..
+ rosdep install --from-paths src --ignore-src --default-yes
  colcon build --symlink-install
  . install/setup.bash
  ros2 run ros_network_viz ros_network_viz
